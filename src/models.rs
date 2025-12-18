@@ -2,8 +2,59 @@ use chrono::{DateTime, NaiveDate, Utc};
 use serde::{Deserialize, Serialize};
 use sqlx::FromRow;
 use std::collections::HashMap;
+use std::fmt;
 
-/// Tag weights for team balancing
+/// Player tags for team balancing
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum Tag {
+    Playmaker,
+    Runner,
+    Def,
+    Atk,
+    Gk,
+}
+
+impl Tag {
+    /// All tags (excluding GK which has special handling)
+    pub const ALL: &'static [Tag] = &[Tag::Playmaker, Tag::Runner, Tag::Def, Tag::Atk];
+
+    /// Weight for team balancing (GK has no weight - special handling)
+    pub fn weight(self) -> i32 {
+        match self {
+            Tag::Playmaker => 100,
+            Tag::Runner => 80,
+            Tag::Def => 40,
+            Tag::Atk => 20,
+            Tag::Gk => 0,
+        }
+    }
+
+    /// Parse from string (case-insensitive)
+    pub fn from_str(s: &str) -> Option<Tag> {
+        match s.trim().to_uppercase().as_str() {
+            "PLAYMAKER" => Some(Tag::Playmaker),
+            "RUNNER" => Some(Tag::Runner),
+            "DEF" => Some(Tag::Def),
+            "ATK" => Some(Tag::Atk),
+            "GK" => Some(Tag::Gk),
+            _ => None,
+        }
+    }
+}
+
+impl fmt::Display for Tag {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Tag::Playmaker => write!(f, "PLAYMAKER"),
+            Tag::Runner => write!(f, "RUNNER"),
+            Tag::Def => write!(f, "DEF"),
+            Tag::Atk => write!(f, "ATK"),
+            Tag::Gk => write!(f, "GK"),
+        }
+    }
+}
+
+/// Legacy constant for backwards compatibility with views
 pub const TAG_WEIGHTS: &[(&str, i32)] = &[
     ("PLAYMAKER", 100),
     ("RUNNER", 80),
@@ -29,21 +80,26 @@ pub struct Player {
 }
 
 impl Player {
-    /// Parse tags from comma-separated string
-    pub fn tag_list(&self) -> Vec<&str> {
+    /// Parse tags from comma-separated string into Tag enums
+    pub fn tags(&self) -> Vec<Tag> {
         self.tags
             .split(',')
-            .map(|s| s.trim())
-            .filter(|s| !s.is_empty())
+            .filter_map(Tag::from_str)
             .collect()
     }
 
     /// Check if player has a specific tag
-    pub fn has_tag(&self, tag: &str) -> bool {
-        self.tag_list()
-            .iter()
-            .any(|t| t.eq_ignore_ascii_case(tag))
+    pub fn has_tag(&self, tag: Tag) -> bool {
+        self.tags().contains(&tag)
     }
+}
+
+/// Helper to convert a slice of Tags to comma-separated string
+pub fn tags_to_string(tags: &[Tag]) -> String {
+    tags.iter()
+        .map(|t| t.to_string())
+        .collect::<Vec<_>>()
+        .join(",")
 }
 
 /// Form data for creating a new player

@@ -61,6 +61,14 @@ fn render_player_list(players: &[crate::models::Player]) -> Markup {
     if players.is_empty() {
         return html! {
             p { "No players yet. Add your first player above!" }
+            button
+                class="secondary"
+                hx-post="/api/seed"
+                hx-target="#player-list"
+                hx-swap="innerHTML"
+            {
+                "🌱 Seed Default Roster"
+            }
         };
     }
 
@@ -151,6 +159,27 @@ pub async fn update_player(
         Err(e) => {
             tracing::error!("Failed to update player: {}", e);
             (StatusCode::INTERNAL_SERVER_ERROR, "Failed to update player").into_response()
+        }
+    }
+}
+
+/// Seed database with default players (htmx endpoint)
+pub async fn seed_roster(
+    State(state): State<Arc<AppState>>,
+) -> impl IntoResponse {
+    match db::seed_players(&state.db).await {
+        Ok(count) => {
+            let players = db::get_all_players(&state.db).await.unwrap_or_default();
+            Html(html! {
+                p class="success" { (count) " players added!" }
+                (render_player_list(&players))
+            }.into_string())
+        }
+        Err(e) => {
+            tracing::error!("Failed to seed players: {}", e);
+            Html(html! {
+                p class="error" { "Failed to seed players" }
+            }.into_string())
         }
     }
 }

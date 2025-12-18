@@ -1,12 +1,12 @@
 use crate::elo::average_elo;
-use crate::models::{Player, TeamSplit, TAG_WEIGHTS};
+use crate::models::{Player, Tag, TeamSplit};
 use itertools::Itertools;
 use rand::seq::SliceRandom;
 use rand::thread_rng;
 use std::collections::HashMap;
 
 /// Count how many players have a specific tag
-fn count_tags(players: &[Player], tag: &str) -> i32 {
+fn count_tags(players: &[Player], tag: Tag) -> i32 {
     players.iter().filter(|p| p.has_tag(tag)).count() as i32
 }
 
@@ -19,12 +19,12 @@ fn calculate_split_cost(team_a: &[Player], team_b: &[Player]) -> TeamSplit {
     let mut tag_costs = HashMap::new();
     let mut total_tag_cost = 0.0;
 
-    for (tag, weight) in TAG_WEIGHTS {
-        let count_a = count_tags(team_a, tag);
-        let count_b = count_tags(team_b, tag);
+    for tag in Tag::ALL {
+        let count_a = count_tags(team_a, *tag);
+        let count_b = count_tags(team_b, *tag);
         let diff = (count_a - count_b).abs();
         tag_costs.insert(tag.to_string(), diff);
-        total_tag_cost += diff as f32 * *weight as f32;
+        total_tag_cost += diff as f32 * tag.weight() as f32;
     }
 
     TeamSplit {
@@ -46,8 +46,8 @@ pub fn balance_teams(players: &[Player], randomize: bool) -> Option<TeamSplit> {
     let team_size = players.len() / 2;
 
     // Identify goalkeepers
-    let gks: Vec<_> = players.iter().filter(|p| p.has_tag("GK")).cloned().collect();
-    let non_gks: Vec<_> = players.iter().filter(|p| !p.has_tag("GK")).cloned().collect();
+    let gks: Vec<_> = players.iter().filter(|p| p.has_tag(Tag::Gk)).cloned().collect();
+    let non_gks: Vec<_> = players.iter().filter(|p| !p.has_tag(Tag::Gk)).cloned().collect();
 
     let mut all_splits: Vec<TeamSplit> = Vec::new();
     let mut best_split: Option<TeamSplit> = None;
@@ -210,8 +210,8 @@ mod tests {
         let split = balance_teams(&players, false).unwrap();
 
         // Should split playmakers between teams
-        let pm_a = split.team_a.iter().filter(|p| p.has_tag("PLAYMAKER")).count();
-        let pm_b = split.team_b.iter().filter(|p| p.has_tag("PLAYMAKER")).count();
+        let pm_a = split.team_a.iter().filter(|p| p.has_tag(Tag::Playmaker)).count();
+        let pm_b = split.team_b.iter().filter(|p| p.has_tag(Tag::Playmaker)).count();
         assert_eq!(pm_a, 1);
         assert_eq!(pm_b, 1);
     }

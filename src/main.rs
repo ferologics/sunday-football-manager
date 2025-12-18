@@ -17,8 +17,19 @@ pub struct AppState {
     pub db: PgPool,
 }
 
-#[shuttle_runtime::main]
-async fn main(#[shuttle_shared_db::Postgres] pool: PgPool) -> shuttle_axum::ShuttleAxum {
+#[tokio::main]
+async fn main() {
+    dotenvy::from_filename(".env.local").ok();
+    dotenvy::dotenv().ok();
+    tracing_subscriber::fmt::init();
+
+    let database_url = std::env::var("DATABASE_URL")
+        .expect("DATABASE_URL must be set");
+
+    let pool = PgPool::connect(&database_url)
+        .await
+        .expect("Failed to connect to database");
+
     // Run migrations
     sqlx::migrate!("./migrations")
         .run(&pool)
@@ -35,8 +46,9 @@ async fn main(#[shuttle_shared_db::Postgres] pool: PgPool) -> shuttle_axum::Shut
         .route("/history", get(views::history::page))
         // API - Players
         .route("/api/players", post(views::roster::create_player))
-        .route("/api/players/:id", put(views::roster::update_player))
-        .route("/api/players/:id", delete(views::roster::delete_player))
+        .route("/api/players/{id}", put(views::roster::update_player))
+        .route("/api/players/{id}", delete(views::roster::delete_player))
+        .route("/api/seed", post(views::roster::seed_roster))
         // API - Match Day
         .route("/api/generate", post(views::match_day::generate_teams))
         .route("/api/shuffle", post(views::match_day::shuffle_teams))
@@ -44,5 +56,15 @@ async fn main(#[shuttle_shared_db::Postgres] pool: PgPool) -> shuttle_axum::Shut
         .route("/api/record", post(views::record::submit_result))
         .with_state(state);
 
-    Ok(router.into())
+    let port = std::env::var("PORT").unwrap_or_else(|_| "8000".to_string());
+    let addr = format!("0.0.0.0:{}", port);
+    tracing::info!("Starting server on {}", addr);
+
+    let listener = tokio::net::TcpListener::bind(&addr)
+        .await
+        .expect("Failed to bind to address");
+
+    axum::serve(listener, router)
+        .await
+        .expect("Server error");
 }
