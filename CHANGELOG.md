@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.3.6
+
+### Changed
+
+- **Code cleanup**: Removed dead code from `db.rs` (unused `get_player` and `get_player_by_name` functions)
+- **DRY refactor**: Extracted `render_participation` helper to eliminate duplicated participation display code in `record.rs` and `history.rs`
+
+### Added
+
+- **Unit tests**: Added 10 tests for `models.rs` covering Tag parsing, Player methods, and EloSnapshot serialization
+
 ## 0.3.5
 
 ### Changed

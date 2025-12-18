@@ -160,3 +160,16 @@ pub fn render_elo_delta(delta: f32) -> Markup {
         span class=(class) { (sign) (format!("{:.0}", delta)) }
     }
 }
+
+/// Format participation percentage (only shown if < 100%)
+pub fn render_participation(participation: f32) -> Markup {
+    if participation < 1.0 {
+        html! {
+            span class="secondary participation-pct" {
+                " (" (format!("{:.0}%", participation * 100.0)) ")"
+            }
+        }
+    } else {
+        html! {}
+    }
+}

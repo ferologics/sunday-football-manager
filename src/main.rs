@@ -33,8 +33,7 @@ async fn main() {
         )
         .init();
 
-    let database_url = std::env::var("DATABASE_URL")
-        .expect("DATABASE_URL must be set");
+    let database_url = std::env::var("DATABASE_URL").expect("DATABASE_URL must be set");
 
     let pool = PgPool::connect(&database_url)
         .await
@@ -61,7 +60,11 @@ async fn main() {
         tracing::warn!("SECURE_COOKIES=false - cookies will be sent over HTTP (dev only!)");
     }
 
-    let state = Arc::new(AppState { db: pool, auth_password, secure_cookies });
+    let state = Arc::new(AppState {
+        db: pool,
+        auth_password,
+        secure_cookies,
+    });
 
     let router = Router::new()
         // Pages
@@ -92,7 +95,5 @@ async fn main() {
         .await
         .expect("Failed to bind to address");
 
-    axum::serve(listener, router)
-        .await
-        .expect("Server error");
+    axum::serve(listener, router).await.expect("Server error");
 }

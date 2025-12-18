@@ -1,6 +1,6 @@
 use crate::auth::is_authenticated;
 use crate::models::{EloSnapshot, Match, Player};
-use crate::views::layout::{base, render_elo_delta, AuthState};
+use crate::views::layout::{base, render_elo_delta, render_participation, AuthState};
 use crate::{db, AppState};
 use axum::{
     extract::State,
@@ -218,11 +218,7 @@ fn render_match(m: &Match, player_names: &HashMap<i32, String>) -> Markup {
                                     " "
                                     @let effective_delta = change.delta * change.participation;
                                     (render_elo_delta(effective_delta))
-                                    @if change.participation < 1.0 {
-                                        span class="secondary participation-pct" {
-                                            " (" (format!("{:.0}%", change.participation * 100.0)) ")"
-                                        }
-                                    }
+                                    (render_participation(change.participation))
                                 }
                             }
                         }
@@ -241,11 +237,7 @@ fn render_match(m: &Match, player_names: &HashMap<i32, String>) -> Markup {
                                     " "
                                     @let effective_delta = change.delta * change.participation;
                                     (render_elo_delta(effective_delta))
-                                    @if change.participation < 1.0 {
-                                        span class="secondary participation-pct" {
-                                            " (" (format!("{:.0}%", change.participation * 100.0)) ")"
-                                        }
-                                    }
+                                    (render_participation(change.participation))
                                 }
                             }
                         }

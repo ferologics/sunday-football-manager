@@ -20,28 +20,6 @@ pub async fn get_players_by_ids(pool: &PgPool, ids: &[i32]) -> Result<Vec<Player
     .await
 }
 
-/// Get a single player by ID
-#[allow(dead_code)]
-pub async fn get_player(pool: &PgPool, id: i32) -> Result<Option<Player>, sqlx::Error> {
-    sqlx::query_as::<_, Player>(
-        "SELECT id, name, elo, tags, matches_played, created_at FROM players WHERE id = $1",
-    )
-    .bind(id)
-    .fetch_optional(pool)
-    .await
-}
-
-/// Get a single player by name
-#[allow(dead_code)]
-pub async fn get_player_by_name(pool: &PgPool, name: &str) -> Result<Option<Player>, sqlx::Error> {
-    sqlx::query_as::<_, Player>(
-        "SELECT id, name, elo, tags, matches_played, created_at FROM players WHERE name = $1",
-    )
-    .bind(name)
-    .fetch_optional(pool)
-    .await
-}
-
 /// Create a new player
 pub async fn create_player(pool: &PgPool, player: &NewPlayer) -> Result<Player, sqlx::Error> {
     let elo = player.elo.unwrap_or(ELO_DEFAULT);
