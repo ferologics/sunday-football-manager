@@ -14,9 +14,6 @@ pub enum Tag {
 }
 
 impl Tag {
-    /// All tags (excluding GK which has special handling)
-    pub const ALL: &'static [Tag] = &[Tag::Playmaker, Tag::Runner, Tag::Def, Tag::Atk];
-
     /// Weight for team balancing (GK has no weight - special handling)
     pub fn weight(self) -> i32 {
         match self {
@@ -95,11 +92,7 @@ impl Player {
 
     /// Sum of tag weights for this player (for team balancing)
     pub fn tag_value(&self) -> i32 {
-        Tag::ALL
-            .iter()
-            .filter(|t| self.has_tag(**t))
-            .map(|t| t.weight())
-            .sum()
+        self.tags().iter().map(|t| t.weight()).sum()
     }
 }
 

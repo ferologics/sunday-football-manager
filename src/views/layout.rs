@@ -29,19 +29,23 @@ pub fn base(title: &str, current_page: &str, auth: &AuthState, content: Markup) 
                 style {
                     r#"
                     .nav-buttons { display: flex; gap: 0.5rem; flex-wrap: wrap; margin-bottom: 1rem; }
-                    .nav-buttons a { flex: 1; text-align: center; min-width: 120px; }
-                    .team-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+                    .nav-buttons a { flex: 1; text-align: center; min-width: 70px; display: flex; align-items: center; justify-content: center; }
+                    .team-grid { display: grid; grid-template-columns: 1fr; gap: 1rem; }
+                    @media (min-width: 768px) { .team-grid { grid-template-columns: 1fr 1fr; } }
                     .player-list { list-style: none; padding: 0; }
+                    .table-container { overflow-x: auto; }
                     .player-list li { padding: 0.5rem; border-bottom: 1px solid var(--pico-muted-border-color); }
                     .tag { display: inline-block; padding: 0.1rem 0.4rem; border-radius: 4px; font-size: 0.75rem; background: var(--pico-primary-background); color: var(--pico-primary-inverse); margin-left: 0.25rem; }
                     .elo-positive { color: var(--pico-ins-color); }
                     .elo-negative { color: var(--pico-del-color); }
                     .cost-breakdown { font-size: 0.875rem; color: var(--pico-muted-color); }
                     .checkbox-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 0.5rem; }
-                    .header-row { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem; margin-bottom: 1rem; }
+                    .header-row { display: flex; flex-direction: column; align-items: flex-start; gap: 0.5rem; margin-bottom: 1rem; }
+                    @media (min-width: 768px) { .header-row { flex-direction: row; justify-content: space-between; align-items: center; gap: 1rem; } }
+                    .auth-form, .auth-status { margin-left: auto; }
                     .auth-form { display: flex; gap: 0.5rem; align-items: stretch; margin: 0; }
                     .auth-form input, .auth-form button { margin: 0; padding: 0.5rem 0.75rem; height: auto; }
-                    .auth-form input { width: 150px; }
+                    .auth-form input { width: 150px; max-width: 40vw; }
                     .auth-status { display: flex; gap: 0.5rem; align-items: center; }
                     .success-message {
                         color: var(--pico-ins-color);
@@ -82,13 +86,13 @@ pub fn base(title: &str, current_page: &str, auth: &AuthState, content: Markup) 
                     // Navigation
                     nav class="nav-buttons" {
                         a href="/" role="button" class=(if current_page == "match_day" { "primary" } else { "secondary outline" }) {
-                            "Team Generator"
+                            "Teams"
                         }
                         a href="/roster" role="button" class=(if current_page == "roster" { "primary" } else { "secondary outline" }) {
                             "Roster"
                         }
                         a href="/record" role="button" class=(if current_page == "record" { "primary" } else { "secondary outline" }) {
-                            "Record Result"
+                            "Record"
                         }
                         a href="/history" role="button" class=(if current_page == "history" { "primary" } else { "secondary outline" }) {
                             "History"

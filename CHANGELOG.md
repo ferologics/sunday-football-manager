@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.3.1
+
+### Fixed
+
+- **Mobile nav alignment**: Navigation button text now vertically centers when buttons wrap to multiple lines
+- **Mobile team grid**: Teams stack vertically on mobile screens, side-by-side on desktop (768px+)
+- **Performance**: `tag_value()` now parses tag string once instead of 4 times per call
+- **Roster table scroll**: Table now scrolls horizontally on mobile instead of causing full-page overflow
+- **Compact nav labels**: "Teams", "Roster", "Record", "History" now fit in one row on mobile
+- **Header layout**: Login/logout right-aligned below title on mobile, inline on desktop
+
 ## 0.3.0
 
 ### Changed

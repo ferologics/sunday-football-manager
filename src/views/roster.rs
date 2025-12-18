@@ -71,33 +71,35 @@ fn render_player_list(players: &[crate::models::Player], logged_in: bool) -> Mar
     }
 
     html! {
-        table {
-            thead {
-                tr {
-                    th { "Name" }
-                    th { "Elo" }
-                    th { "Tags" }
-                    th { "Matches" }
-                    th { "Actions" }
+        div class="table-container" {
+            table {
+                thead {
+                    tr {
+                        th { "Name" }
+                        th { "Elo" }
+                        th { "Tags" }
+                        th { "Matches" }
+                        th { "Actions" }
+                    }
                 }
-            }
-            tbody {
-                @for player in players {
-                    tr id=(format!("player-{}", player.id)) {
-                        td { (player.name) }
-                        td { (format!("{:.0}", player.elo)) }
-                        td { (render_tags(&player.tags)) }
-                        td { (player.matches_played) }
-                        td {
-                            button
-                                class="secondary outline"
-                                hx-delete=(format!("/api/players/{}", player.id))
-                                hx-target="#player-list"
-                                hx-swap="innerHTML"
-                                hx-confirm=(format!("Delete {}?", player.name))
-                                disabled[!logged_in]
-                            {
-                                "Delete"
+                tbody {
+                    @for player in players {
+                        tr id=(format!("player-{}", player.id)) {
+                            td { (player.name) }
+                            td { (format!("{:.0}", player.elo)) }
+                            td { (render_tags(&player.tags)) }
+                            td { (player.matches_played) }
+                            td {
+                                button
+                                    class="secondary outline"
+                                    hx-delete=(format!("/api/players/{}", player.id))
+                                    hx-target="#player-list"
+                                    hx-swap="innerHTML"
+                                    hx-confirm=(format!("Delete {}?", player.name))
+                                    disabled[!logged_in]
+                                {
+                                    "Delete"
+                                }
                             }
                         }
                     }
