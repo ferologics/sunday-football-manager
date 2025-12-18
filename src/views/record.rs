@@ -5,8 +5,8 @@ use crate::{db, AppState};
 use axum::{
     extract::State,
     response::{Html, IntoResponse},
-    Form,
 };
+use axum_extra::extract::Form;
 use maud::{html, Markup};
 use serde_json::json;
 use std::collections::HashMap;

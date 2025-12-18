@@ -1,6 +1,6 @@
 use crate::balance::balance_teams;
 use crate::elo::average_elo;
-use crate::models::{TeamSplit, MAX_PLAYERS, TAG_WEIGHTS};
+use crate::models::{TeamSplit, TAG_WEIGHTS};
 use crate::views::layout::{base, render_tags};
 use crate::{db, AppState};
 use axum::{
@@ -24,7 +24,7 @@ pub async fn page(State(state): State<Arc<AppState>>) -> impl IntoResponse {
             p { "No players in database. Add players in the Roster page." }
         } @else {
             form id="checkin-form" {
-                p { "Select players for today's match (max " (MAX_PLAYERS) "):" }
+                p { "Select players for today's match:" }
                 div class="checkbox-grid" {
                     @for player in &players {
                         label {
@@ -66,34 +66,25 @@ pub async fn page(State(state): State<Arc<AppState>>) -> impl IntoResponse {
             p class="secondary" { "Select players and click 'Generate Teams'" }
         }
 
-        // Script to enforce max players and enable/disable buttons
+        // Script to enable/disable buttons based on selection
         script {
-            (maud::PreEscaped(format!(r#"
-                const maxPlayers = {};
+            (maud::PreEscaped(r#"
                 const buttons = document.querySelectorAll('#checkin-form button[type="submit"]');
 
-                function updateState() {{
+                function updateState() {
                     const checked = document.querySelectorAll('.player-checkbox:checked').length;
-
-                    // Disable unchecked boxes when at max
-                    if (checked >= maxPlayers) {{
-                        document.querySelectorAll('.player-checkbox:not(:checked)').forEach(c => c.disabled = true);
-                    }} else {{
-                        document.querySelectorAll('.player-checkbox').forEach(c => c.disabled = false);
-                    }}
-
-                    // Only enable buttons when exactly max players selected
-                    buttons.forEach(btn => btn.disabled = checked !== maxPlayers);
-                }}
+                    // Enable buttons when at least 2 players selected (minimum for teams)
+                    buttons.forEach(btn => btn.disabled = checked < 2);
+                }
 
                 // Initial state
                 updateState();
 
                 // Listen for changes
-                document.querySelectorAll('.player-checkbox').forEach(cb => {{
+                document.querySelectorAll('.player-checkbox').forEach(cb => {
                     cb.addEventListener('change', updateState);
-                }});
-            "#, MAX_PLAYERS)))
+                });
+            "#))
         }
     };
 
