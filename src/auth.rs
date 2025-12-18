@@ -44,7 +44,7 @@ pub async fn login(
         let cookie = Cookie::build((AUTH_COOKIE_NAME, password.clone()))
             .path("/")
             .http_only(true)
-            .secure(false) // Set to true in production with HTTPS
+            .secure(state.secure_cookies)
             .build();
         (jar.add(cookie), Redirect::to("/")).into_response()
     } else {

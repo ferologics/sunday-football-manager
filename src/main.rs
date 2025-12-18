@@ -18,6 +18,7 @@ use tower_http::trace::TraceLayer;
 pub struct AppState {
     pub db: PgPool,
     pub auth_password: Option<String>,
+    pub secure_cookies: bool,
 }
 
 #[tokio::main]
@@ -52,7 +53,15 @@ async fn main() {
         tracing::warn!("No AUTH_PASSWORD set - site is unprotected");
     }
 
-    let state = Arc::new(AppState { db: pool, auth_password });
+    // Default to secure cookies (HTTPS only) unless explicitly disabled
+    let secure_cookies = std::env::var("SECURE_COOKIES")
+        .map(|v| v != "false")
+        .unwrap_or(true);
+    if !secure_cookies {
+        tracing::warn!("SECURE_COOKIES=false - cookies will be sent over HTTP (dev only!)");
+    }
+
+    let state = Arc::new(AppState { db: pool, auth_password, secure_cookies });
 
     let router = Router::new()
         // Pages

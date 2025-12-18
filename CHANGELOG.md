@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.3.4
+
+### Fixed
+
+- **Secure cookies**: Auth cookies now use `secure=true` by default (HTTPS only). Set `SECURE_COOKIES=false` for local dev.
+
 ## 0.3.3
 
 ### Added
