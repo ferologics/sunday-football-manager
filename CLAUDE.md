@@ -5,34 +5,44 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Commands
 
 ```bash
-just check    # Run ruff + ty checks (alias: just c)
-just run      # Run the Streamlit app (alias: just r)
-just setup    # Setup project (install dependencies)
+just run      # Run locally with Shuttle (alias: just r)
+just check    # cargo check + clippy (alias: just c)
+just deploy   # Deploy to Shuttle (alias: just d)
+just test     # Run tests
 ```
 
 ## Architecture
 
-Single-file Streamlit app (`app.py`) for managing Sunday League 7v7 football. Uses Google Sheets as database via `gspread`.
+Rust web app using Axum + Shuttle.rs for hosting, with PostgreSQL database.
 
-**Data Flow:**
+**Tech Stack:**
+- Axum 0.7 - Web framework
+- Shuttle - Hosting and DB provisioning
+- sqlx - Database queries (compile-time checked)
+- Maud - Compile-time HTML templates
+- htmx - Client-side interactivity
+- PicoCSS - Styling
 
-- Google Sheets stores `Players` (Name, Elo, Tags, Matches_Played) and `Matches` (Date, Team_A, Team_B, Score_A, Score_B)
-- Credentials via `st.secrets["gcp_service_account"]` and `st.secrets["sheet_url"]`
-- Guest players stored in `st.session_state.guests` (not persisted to sheet)
+**Project Structure:**
+- `src/main.rs` - Entry point, router setup
+- `src/models.rs` - Data structures, constants
+- `src/db.rs` - Database queries
+- `src/balance.rs` - Team balancing algorithm
+- `src/elo.rs` - Elo calculations
+- `src/views/` - Maud HTML templates for each page
+
+**Database:**
+- PostgreSQL via `shuttle-shared-db`
+- Migrations in `migrations/`
+- Two tables: `players` and `matches`
 
 **Team Balancing Algorithm:**
-
 - Brute force all C(n, n/2) combinations
-- Cost function: `abs(avg_elo_A - avg_elo_B) + sum(tag_penalties)`
-- Tag weights at top of file: PLAYMAKER > RUNNER > DEF > ATK
-- GK special handling: force split if 2 GKs, random assignment if 1
+- Cost = |avg_elo_A - avg_elo_B| + Σ(tag_penalty × weight)
+- Tag weights: PLAYMAKER(100) > RUNNER(80) > DEF(40) > ATK(20)
+- GK handling: force split if 2 GKs, random if 1
 
 **Elo System:**
-
-- Standard Elo with K=32
-- Goal difference multiplier: `min(1 + (GD-1)*0.5, 2.5)`
-- Guests (`is_guest=True`) excluded from Elo updates
-
-## Google Sheet Column Names
-
-The code expects title case headers: `Name`, `Elo`, `Tags`, `Matches_Played`, `Date`, `Team_A`, `Team_B`, `Score_A`, `Score_B`
+- K-factor: 32
+- Goal diff multiplier: min(1 + (GD-1)*0.5, 2.5)
+- Standard expected score formula

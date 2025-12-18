@@ -1,14 +1,26 @@
+alias b := build
 alias c := check
 alias r := run
-alias s := setup
+alias d := deploy
 
+build:
+  cargo build
 
 check:
-  uv run ruff check app.py
-  uv run ty check app.py
+  cargo check
+  cargo clippy
+
+deploy:
+  cargo shuttle deploy
+
+init:
+  cargo shuttle login
 
 run:
-  uv run streamlit run app.py
+  cargo shuttle run
 
 setup:
-  uv sync
+  cargo install cargo-shuttle
+
+test:
+  cargo test

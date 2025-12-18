@@ -1,2 +1,16 @@
+# Rust
+/target
+Cargo.lock
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Claude
 .claude/settings.local.json
-.streamlit/secrets.toml
+
+# Environment
+.env
+.env.local
