@@ -23,7 +23,7 @@ pub async fn page(State(state): State<Arc<AppState>>, jar: CookieJar) -> impl In
         // Add player form
         details open {
             summary { "Add New Player" }
-            form hx-post="/api/players" hx-target="#player-list" hx-swap="innerHTML" {
+            form hx-post="/api/players" hx-target="#player-list" hx-swap="innerHTML" hx-on--after-request="if(event.detail.successful) this.reset()" {
                 div class="grid" {
                     input type="text" name="name" placeholder="Player name" required disabled[!logged_in];
                     input type="number" name="elo" placeholder="Starting Elo" value="1200" min="800" max="2000" disabled[!logged_in];
@@ -127,9 +127,12 @@ pub async fn create_player(
     };
 
     match db::create_player(&state.db, &new_player).await {
-        Ok(_) => {
+        Ok(player) => {
             let players = db::get_all_players(&state.db).await.unwrap_or_default();
-            Html(render_player_list(&players, true).into_string()).into_response()
+            Html(html! {
+                p class="success-message" { "Added " (player.name) "!" }
+                (render_player_list(&players, true))
+            }.into_string()).into_response()
         }
         Err(e) => {
             tracing::error!("Failed to create player: {}", e);

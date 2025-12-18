@@ -43,6 +43,16 @@ pub fn base(title: &str, current_page: &str, auth: &AuthState, content: Markup) 
                     .auth-form input, .auth-form button { margin: 0; padding: 0.5rem 0.75rem; height: auto; }
                     .auth-form input { width: 150px; }
                     .auth-status { display: flex; gap: 0.5rem; align-items: center; }
+                    .success-message {
+                        color: var(--pico-ins-color);
+                        font-weight: bold;
+                        animation: fadeOut 3s forwards;
+                    }
+                    @keyframes fadeOut {
+                        0% { opacity: 1; }
+                        70% { opacity: 1; }
+                        100% { opacity: 0; }
+                    }
                     "#
                 }
             }
