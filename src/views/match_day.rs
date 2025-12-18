@@ -11,12 +11,12 @@ use axum_extra::extract::Form;
 use maud::{html, Markup};
 use std::sync::Arc;
 
-/// Match Day page - check-in and team generation
+/// Team Generator page - check-in and team generation
 pub async fn page(State(state): State<Arc<AppState>>) -> impl IntoResponse {
     let players = db::get_all_players(&state.db).await.unwrap_or_default();
 
     let content = html! {
-        h2 { "Match Day" }
+        h2 { "Team Generator" }
 
         // Check-in section
         h3 { "Player Check-In" }
@@ -88,7 +88,7 @@ pub async fn page(State(state): State<Arc<AppState>>) -> impl IntoResponse {
         }
     };
 
-    Html(base("Match Day", "match_day", content).into_string())
+    Html(base("Team Generator", "match_day", content).into_string())
 }
 
 /// Generate teams endpoint (htmx)

@@ -55,7 +55,7 @@ async fn main() {
         .route("/api/players", post(views::roster::create_player))
         .route("/api/players/{id}", put(views::roster::update_player))
         .route("/api/players/{id}", delete(views::roster::delete_player))
-        // API - Match Day
+        // API - Team Generator
         .route("/api/generate", post(views::match_day::generate_teams))
         .route("/api/shuffle", post(views::match_day::shuffle_teams))
         // API - Record

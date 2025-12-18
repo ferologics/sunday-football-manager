@@ -36,7 +36,7 @@ pub fn base(title: &str, current_page: &str, content: Markup) -> Markup {
                     // Navigation
                     nav class="nav-buttons" {
                         a href="/" role="button" class=(if current_page == "match_day" { "primary" } else { "secondary outline" }) {
-                            "Match Day"
+                            "Team Generator"
                         }
                         a href="/roster" role="button" class=(if current_page == "roster" { "primary" } else { "secondary outline" }) {
                             "Roster"
