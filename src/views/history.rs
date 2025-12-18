@@ -1,5 +1,5 @@
 use crate::auth::is_authenticated;
-use crate::models::{EloSnapshot, Match};
+use crate::models::{EloSnapshot, Match, Player};
 use crate::views::layout::{base, render_elo_delta, AuthState};
 use crate::{db, AppState};
 use axum::{
@@ -13,26 +13,25 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 /// Build Elo timeline from matches for each player
-fn build_elo_timeline(matches: &[Match], players: &[crate::models::Player]) -> serde_json::Value {
+fn build_elo_timeline(matches: &[Match], players: &[Player]) -> serde_json::Value {
     // Matches are ordered newest first, reverse for chronological
     let matches_chrono: Vec<_> = matches.iter().rev().collect();
 
-    // Track Elo for each player over time
-    // Start with initial Elo (before first match = current - all deltas)
+    // Build ID → name map
+    let id_to_name: HashMap<i32, &str> = players.iter().map(|p| (p.id, p.name.as_str())).collect();
+
+    // Track Elo for each player over time (keyed by name for chart display)
     let mut player_history: HashMap<String, Vec<(String, f32)>> = HashMap::new();
 
     // Calculate starting Elo for each player by working backwards
-    let mut starting_elo: HashMap<String, f32> = players
-        .iter()
-        .map(|p| (p.name.clone(), p.elo))
-        .collect();
+    let mut starting_elo: HashMap<i32, f32> = players.iter().map(|p| (p.id, p.elo)).collect();
 
     // Subtract all deltas (effective = delta * participation) to get starting Elo
     for m in matches {
-        let snapshot: HashMap<String, EloSnapshot> = serde_json::from_value(m.elo_snapshot.clone())
-            .unwrap_or_default();
-        for (name, change) in &snapshot {
-            if let Some(elo) = starting_elo.get_mut(name) {
+        let snapshot: HashMap<i32, EloSnapshot> =
+            serde_json::from_value(m.elo_snapshot.clone()).unwrap_or_default();
+        for (player_id, change) in &snapshot {
+            if let Some(elo) = starting_elo.get_mut(player_id) {
                 let effective_delta = change.delta * change.participation;
                 *elo -= effective_delta;
             }
@@ -44,18 +43,20 @@ fn build_elo_timeline(matches: &[Match], players: &[crate::models::Player]) -> s
 
     for m in &matches_chrono {
         let date = m.played_at.format("%Y-%m-%d").to_string();
-        let snapshot: HashMap<String, EloSnapshot> = serde_json::from_value(m.elo_snapshot.clone())
-            .unwrap_or_default();
+        let snapshot: HashMap<i32, EloSnapshot> =
+            serde_json::from_value(m.elo_snapshot.clone()).unwrap_or_default();
 
         // Update Elo for players in this match (using effective delta)
-        for (name, change) in &snapshot {
+        for (player_id, change) in &snapshot {
             let effective_delta = change.delta * change.participation;
             let new_elo = change.before + effective_delta;
-            current_elo.insert(name.clone(), new_elo);
-            player_history
-                .entry(name.clone())
-                .or_default()
-                .push((date.clone(), new_elo));
+            current_elo.insert(*player_id, new_elo);
+            if let Some(name) = id_to_name.get(player_id) {
+                player_history
+                    .entry((*name).to_string())
+                    .or_default()
+                    .push((date.clone(), new_elo));
+            }
         }
     }
 
@@ -191,9 +192,9 @@ fn render_match(m: &Match, player_names: &HashMap<i32, String>) -> Markup {
         "Draw"
     };
 
-    // Parse Elo snapshot (keyed by player name)
-    let snapshot: HashMap<String, EloSnapshot> = serde_json::from_value(m.elo_snapshot.clone())
-        .unwrap_or_default();
+    // Parse Elo snapshot (ID-keyed format)
+    let snapshot: HashMap<i32, EloSnapshot> =
+        serde_json::from_value(m.elo_snapshot.clone()).unwrap_or_default();
 
     html! {
         details {
@@ -213,7 +214,7 @@ fn render_match(m: &Match, player_names: &HashMap<i32, String>) -> Markup {
                             @let name = player_names.get(player_id).map(|s| s.as_str()).unwrap_or("Unknown");
                             li {
                                 (name)
-                                @if let Some(change) = snapshot.get(name) {
+                                @if let Some(change) = snapshot.get(player_id) {
                                     " "
                                     @let effective_delta = change.delta * change.participation;
                                     (render_elo_delta(effective_delta))
@@ -236,7 +237,7 @@ fn render_match(m: &Match, player_names: &HashMap<i32, String>) -> Markup {
                             @let name = player_names.get(player_id).map(|s| s.as_str()).unwrap_or("Unknown");
                             li {
                                 (name)
-                                @if let Some(change) = snapshot.get(name) {
+                                @if let Some(change) = snapshot.get(player_id) {
                                     " "
                                     @let effective_delta = change.delta * change.participation;
                                     (render_elo_delta(effective_delta))

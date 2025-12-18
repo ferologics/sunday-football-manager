@@ -24,26 +24,26 @@ pub fn average_elo(players: &[Player]) -> f32 {
 }
 
 /// Calculate Elo changes for all players in a match
-/// participation: map of player name -> participation (0.0 to 1.0), defaults to 1.0
-/// Returns a map of player name -> EloSnapshot (before elo, delta, and participation)
+/// participation: map of player ID -> participation (0.0 to 1.0), defaults to 1.0
+/// Returns a map of player ID -> EloSnapshot (before elo, delta, and participation)
 pub fn calculate_elo_changes(
     team_a: &[Player],
     team_b: &[Player],
     score_a: i32,
     score_b: i32,
-    participation: &HashMap<String, f32>,
-) -> HashMap<String, EloSnapshot> {
+    participation: &HashMap<i32, f32>,
+) -> HashMap<i32, EloSnapshot> {
     let elo_a = average_elo(team_a);
     let elo_b = average_elo(team_b);
 
     // Calculate effective team sizes based on participation
     let effective_a: f32 = team_a
         .iter()
-        .map(|p| participation.get(&p.name).copied().unwrap_or(1.0))
+        .map(|p| participation.get(&p.id).copied().unwrap_or(1.0))
         .sum();
     let effective_b: f32 = team_b
         .iter()
-        .map(|p| participation.get(&p.name).copied().unwrap_or(1.0))
+        .map(|p| participation.get(&p.id).copied().unwrap_or(1.0))
         .sum();
 
     // Calculate handicap: if Team A has fewer effective players, they're disadvantaged
@@ -71,9 +71,9 @@ pub fn calculate_elo_changes(
     let mut changes = HashMap::new();
 
     for p in team_a {
-        let player_participation = participation.get(&p.name).copied().unwrap_or(1.0);
+        let player_participation = participation.get(&p.id).copied().unwrap_or(1.0);
         changes.insert(
-            p.name.clone(),
+            p.id,
             EloSnapshot {
                 before: p.elo,
                 delta: delta_a,
@@ -83,9 +83,9 @@ pub fn calculate_elo_changes(
     }
 
     for p in team_b {
-        let player_participation = participation.get(&p.name).copied().unwrap_or(1.0);
+        let player_participation = participation.get(&p.id).copied().unwrap_or(1.0);
         changes.insert(
-            p.name.clone(),
+            p.id,
             EloSnapshot {
                 before: p.elo,
                 delta: delta_b,
@@ -152,11 +152,11 @@ mod tests {
         // All players should have Elo changes
         assert_eq!(changes.len(), 4);
 
-        // Team A should gain, Team B should lose
-        assert!(changes.get("A1").unwrap().delta > 0.0);
-        assert!(changes.get("A2").unwrap().delta > 0.0);
-        assert!(changes.get("B1").unwrap().delta < 0.0);
-        assert!(changes.get("B2").unwrap().delta < 0.0);
+        // Team A should gain, Team B should lose (keyed by player ID)
+        assert!(changes.get(&1).unwrap().delta > 0.0);
+        assert!(changes.get(&2).unwrap().delta > 0.0);
+        assert!(changes.get(&3).unwrap().delta < 0.0);
+        assert!(changes.get(&4).unwrap().delta < 0.0);
 
         // Zero-sum: total delta should be 0
         let total_delta: f32 = changes.values().map(|c| c.delta).sum();
@@ -172,9 +172,9 @@ mod tests {
         // Draw 1-1
         let changes = calculate_elo_changes(&team_a, &team_b, 1, 1, &participation);
 
-        // Equal Elo teams drawing should result in no change
-        let delta_a = changes.get("A").unwrap().delta;
-        let delta_b = changes.get("B").unwrap().delta;
+        // Equal Elo teams drawing should result in no change (keyed by player ID)
+        let delta_a = changes.get(&1).unwrap().delta;
+        let delta_b = changes.get(&2).unwrap().delta;
 
         assert!((delta_a).abs() < 0.001);
         assert!((delta_b).abs() < 0.001);
@@ -190,9 +190,9 @@ mod tests {
         // Underdog wins 3-0 (big upset with large goal diff)
         let changes = calculate_elo_changes(&favorites, &underdogs, 0, 3, &participation);
 
-        // Favorites lose a lot, underdogs gain a lot
-        let fav_delta = changes.get("Favorite").unwrap().delta;
-        let und_delta = changes.get("Underdog").unwrap().delta;
+        // Favorites lose a lot, underdogs gain a lot (keyed by player ID)
+        let fav_delta = changes.get(&1).unwrap().delta;
+        let und_delta = changes.get(&2).unwrap().delta;
 
         assert!(fav_delta < -20.0); // Big loss
         assert!(und_delta > 20.0);  // Big gain
@@ -212,8 +212,8 @@ mod tests {
         let changes = calculate_elo_changes(&team_a, &team_b, 1, 1, &participation);
 
         // Team A had 1 player vs 2, so 100 Elo handicap
-        // With handicap, Team A expected to lose, so draw = gain
-        let delta_a = changes.get("A").unwrap().delta;
+        // With handicap, Team A expected to lose, so draw = gain (keyed by player ID)
+        let delta_a = changes.get(&1).unwrap().delta;
         assert!(delta_a > 0.0, "Short-handed team should gain Elo on draw");
     }
 
@@ -229,15 +229,15 @@ mod tests {
         ];
 
         let mut participation = HashMap::new();
-        participation.insert("A2".to_string(), 0.5); // A2 played 50%
+        participation.insert(2, 0.5); // Player ID 2 (A2) played 50%
 
         // Team A wins
         let changes = calculate_elo_changes(&team_a, &team_b, 2, 1, &participation);
 
-        // A2 should have 50% participation recorded
-        assert_eq!(changes.get("A2").unwrap().participation, 0.5);
+        // A2 (ID 2) should have 50% participation recorded
+        assert_eq!(changes.get(&2).unwrap().participation, 0.5);
 
-        // A1 should have 100% (default)
-        assert_eq!(changes.get("A1").unwrap().participation, 1.0);
+        // A1 (ID 1) should have 100% (default)
+        assert_eq!(changes.get(&1).unwrap().participation, 1.0);
     }
 }

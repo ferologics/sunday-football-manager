@@ -19,10 +19,10 @@ pub async fn page(State(state): State<Arc<AppState>>, jar: CookieJar) -> impl In
     let logged_in = is_authenticated(&jar, &state);
     let auth = AuthState::new(state.auth_password.is_some(), logged_in);
 
-    // Serialize players for JavaScript
+    // Serialize players for JavaScript (include ID for participation tracking)
     let players_json: Vec<serde_json::Value> = players
         .iter()
-        .map(|p| json!({ "name": p.name, "elo": p.elo }))
+        .map(|p| json!({ "id": p.id, "name": p.name, "elo": p.elo }))
         .collect();
     let players_json_str = serde_json::to_string(&players_json).unwrap_or_else(|_| "[]".to_string());
 
@@ -196,17 +196,17 @@ pub async fn page(State(state): State<Arc<AppState>>, jar: CookieJar) -> impl In
                     }}
 
                     dropdown.innerHTML = filtered.map(p =>
-                        `<li data-name="${{p.name}}">${{p.name}}</li>`
+                        `<li data-name="${{p.name}}" data-id="${{p.id}}">${{p.name}}</li>`
                     ).join('');
 
                     dropdown.querySelectorAll('li[data-name]').forEach(li => {{
                         li.addEventListener('click', () => {{
-                            selectPlayer(container, li.dataset.name);
+                            selectPlayer(container, li.dataset.name, parseInt(li.dataset.id));
                         }});
                     }});
                 }}
 
-                function selectPlayer(container, name) {{
+                function selectPlayer(container, name, playerId) {{
                     const team = container.dataset.team;
                     const selected = team === 'a' ? selectedA : selectedB;
                     const inputName = team === 'a' ? 'team_a' : 'team_b';
@@ -220,6 +220,7 @@ pub async fn page(State(state): State<Arc<AppState>>, jar: CookieJar) -> impl In
                     const chip = document.createElement('span');
                     chip.className = 'chip';
                     chip.dataset.name = name;
+                    chip.dataset.playerId = playerId;
                     chip.innerHTML = `${{name}} <select class="participation-select" title="Participation">
                         <option value="1.0">100%</option>
                         <option value="0.75">75%</option>
@@ -230,12 +231,12 @@ pub async fn page(State(state): State<Arc<AppState>>, jar: CookieJar) -> impl In
                     // Handle participation change
                     const select = chip.querySelector('select');
                     select.addEventListener('change', () => {{
-                        updateParticipation(name, select.value);
+                        updateParticipation(playerId, select.value);
                         chip.classList.toggle('injured', select.value !== '1.0');
                     }});
 
                     chip.querySelector('button').addEventListener('click', () => {{
-                        removePlayer(container, name);
+                        removePlayer(container, name, playerId);
                     }});
                     chipsContainer.appendChild(chip);
 
@@ -247,12 +248,12 @@ pub async fn page(State(state): State<Arc<AppState>>, jar: CookieJar) -> impl In
                     hidden.dataset.playerName = name;
                     container.appendChild(hidden);
 
-                    // Add hidden input for participation (default 100%)
+                    // Add hidden input for participation (keyed by player ID)
                     const partInput = document.createElement('input');
                     partInput.type = 'hidden';
                     partInput.name = 'participation';
-                    partInput.value = `${{name}}=1.0`;
-                    partInput.dataset.participationFor = name;
+                    partInput.value = `${{playerId}}=1.0`;
+                    partInput.dataset.participationFor = playerId;
                     container.appendChild(partInput);
 
                     // Clear search and close dropdown
@@ -261,14 +262,14 @@ pub async fn page(State(state): State<Arc<AppState>>, jar: CookieJar) -> impl In
                     container.querySelector('.player-dropdown').classList.remove('open');
                 }}
 
-                function updateParticipation(name, value) {{
-                    const input = document.querySelector(`input[data-participation-for="${{name}}"]`);
+                function updateParticipation(playerId, value) {{
+                    const input = document.querySelector(`input[data-participation-for="${{playerId}}"]`);
                     if (input) {{
-                        input.value = `${{name}}=${{value}}`;
+                        input.value = `${{playerId}}=${{value}}`;
                     }}
                 }}
 
-                function removePlayer(container, name) {{
+                function removePlayer(container, name, playerId) {{
                     const team = container.dataset.team;
                     const selected = team === 'a' ? selectedA : selectedB;
 
@@ -281,7 +282,7 @@ pub async fn page(State(state): State<Arc<AppState>>, jar: CookieJar) -> impl In
                     // Remove hidden inputs
                     const hidden = container.querySelector(`input[data-player-name="${{name}}"]`);
                     if (hidden) hidden.remove();
-                    const partInput = container.querySelector(`input[data-participation-for="${{name}}"]`);
+                    const partInput = container.querySelector(`input[data-participation-for="${{playerId}}"]`);
                     if (partInput) partInput.remove();
                 }}
 
@@ -397,23 +398,23 @@ pub async fn submit_result(
         }.into_string());
     }
 
-    // Build participation map from form data (format: "PlayerName=0.75")
-    let mut participation: HashMap<String, f32> = HashMap::new();
+    // Build participation map from form data (format: "PlayerID=0.75")
+    let mut participation: HashMap<i32, f32> = HashMap::new();
     if let Some(parts) = &form.participation {
         for entry in parts {
-            if let Some((name, value)) = entry.split_once('=') {
-                if let Ok(v) = value.parse::<f32>() {
-                    participation.insert(name.to_string(), v.clamp(0.0, 1.0));
+            if let Some((id_str, value)) = entry.split_once('=') {
+                if let (Ok(id), Ok(v)) = (id_str.parse::<i32>(), value.parse::<f32>()) {
+                    participation.insert(id, v.clamp(0.0, 1.0));
                 }
             }
         }
     }
 
-    // Calculate Elo changes with handicap system
+    // Calculate Elo changes with handicap system (keyed by player ID)
     let elo_changes = calculate_elo_changes(&team_a, &team_b, form.score_a, form.score_b, &participation);
 
-    // Build snapshot
-    let snapshot: HashMap<String, EloSnapshot> = elo_changes.clone();
+    // Build snapshot (keyed by player ID)
+    let snapshot: HashMap<i32, EloSnapshot> = elo_changes.clone();
     let snapshot_json = serde_json::to_value(&snapshot).unwrap_or(json!({}));
 
     // Use a transaction to ensure all updates are atomic
@@ -429,7 +430,7 @@ pub async fn submit_result(
 
     // Update player Elos in database (applying participation for partial credit)
     for player in team_a.iter().chain(team_b.iter()) {
-        if let Some(change) = elo_changes.get(&player.name) {
+        if let Some(change) = elo_changes.get(&player.id) {
             // Apply participation: injured players get proportional Elo change
             let effective_delta = change.delta * change.participation;
             let new_elo = change.before + effective_delta;
@@ -491,7 +492,7 @@ fn render_result(
     team_b: &[Player],
     score_a: i32,
     score_b: i32,
-    elo_changes: &HashMap<String, EloSnapshot>,
+    elo_changes: &HashMap<i32, EloSnapshot>,
 ) -> Markup {
     let result_text = if score_a > score_b {
         "Team A wins!"
@@ -514,11 +515,17 @@ fn render_result(
                     h4 { "Team A" }
                     ul class="player-list" {
                         @for player in team_a {
-                            @if let Some(change) = elo_changes.get(&player.name) {
+                            @if let Some(change) = elo_changes.get(&player.id) {
+                                @let effective_delta = change.delta * change.participation;
                                 li {
                                     (player.name) ": "
-                                    (render_elo_delta(change.delta))
-                                    " (" (format!("{:.0}", change.before)) " → " (format!("{:.0}", change.before + change.delta)) ")"
+                                    (render_elo_delta(effective_delta))
+                                    @if change.participation < 1.0 {
+                                        span class="secondary" style="font-size: 0.8em;" {
+                                            " (" (format!("{:.0}%", change.participation * 100.0)) ")"
+                                        }
+                                    }
+                                    " (" (format!("{:.0}", change.before)) " → " (format!("{:.0}", change.before + effective_delta)) ")"
                                 }
                             }
                         }
@@ -530,11 +537,17 @@ fn render_result(
                     h4 { "Team B" }
                     ul class="player-list" {
                         @for player in team_b {
-                            @if let Some(change) = elo_changes.get(&player.name) {
+                            @if let Some(change) = elo_changes.get(&player.id) {
+                                @let effective_delta = change.delta * change.participation;
                                 li {
                                     (player.name) ": "
-                                    (render_elo_delta(change.delta))
-                                    " (" (format!("{:.0}", change.before)) " → " (format!("{:.0}", change.before + change.delta)) ")"
+                                    (render_elo_delta(effective_delta))
+                                    @if change.participation < 1.0 {
+                                        span class="secondary" style="font-size: 0.8em;" {
+                                            " (" (format!("{:.0}%", change.participation * 100.0)) ")"
+                                        }
+                                    }
+                                    " (" (format!("{:.0}", change.before)) " → " (format!("{:.0}", change.before + effective_delta)) ")"
                                 }
                             }
                         }
