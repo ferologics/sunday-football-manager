@@ -130,7 +130,8 @@ def load_players() -> list[Player]:
     """Load all players from the Players sheet."""
     ws = get_players_worksheet()
     records = ws.get_all_records()
-    return [Player.from_sheet_row(row) for row in records]
+    # Filter out rows with empty names
+    return [Player.from_sheet_row(row) for row in records if row.get("Name")]
 
 
 def load_matches() -> list[Match]:
@@ -517,23 +518,98 @@ def page_record_result() -> None:
     """Record Result page - input scores and update Elo."""
     st.header("Record Match Result")
 
+    # Load players
+    try:
+        players = load_players()
+    except Exception as e:
+        st.error(f"Failed to load players: {e}")
+        return
+
+    # Include guests from session state
+    if "guests" not in st.session_state:
+        st.session_state.guests = []
+    guests: list[Player] = st.session_state.guests
+    all_players = players + guests
+
+    # Add guest form
+    with st.expander("Add Guest Player"):
+        col1, col2 = st.columns([2, 1])
+        with col1:
+            guest_name = st.text_input("Guest Name", key="record_guest_name")
+        with col2:
+            guest_skill = st.slider("Skill", 1000, 1400, 1200, key="record_guest_skill")
+        if st.button("Add Guest", key="record_add_guest") and guest_name:
+            guest = Player(
+                name=f"[G] {guest_name}",
+                elo=float(guest_skill),
+                tags=[],
+                is_guest=True,
+            )
+            st.session_state.guests.append(guest)
+            st.rerun()
+
+    if not all_players:
+        st.warning("No players available. Add players in Roster or add a guest above.")
+        return
+
+    player_names = sorted([p.name for p in all_players])
+    player_map = {p.name: p for p in all_players}
+
+    # Check for generated teams
     split = st.session_state.get("current_split")
+    has_generated = split is not None and not st.session_state.get("match_recorded")
 
-    if not split:
-        st.warning("No teams generated. Go to Match Day to generate teams first.")
-        return
+    if has_generated and split is not None:
+        st.info("Using generated teams. You can modify the selections below if needed.")
+        default_a = [p.name for p in split.team_a if p.name in player_map]
+        default_b = [p.name for p in split.team_b if p.name in player_map]
+    else:
+        default_a = []
+        default_b = []
 
-    if st.session_state.get("match_recorded"):
-        st.success("Match already recorded! Generate new teams to record another match.")
-        return
+    # Team selection
+    st.subheader("Select Teams")
 
-    st.subheader("Current Teams")
     col1, col2 = st.columns(2)
     with col1:
-        st.write("**Team A:**", ", ".join(p.name for p in split.team_a))
+        team_a_names = st.multiselect(
+            "Team A",
+            options=player_names,
+            default=default_a,
+            key="record_team_a",
+        )
     with col2:
-        st.write("**Team B:**", ", ".join(p.name for p in split.team_b))
+        team_b_names = st.multiselect(
+            "Team B",
+            options=player_names,
+            default=default_b,
+            key="record_team_b",
+        )
 
+    # Validation
+    overlap = set(team_a_names) & set(team_b_names)
+    if overlap:
+        st.error(f"Players cannot be on both teams: {', '.join(overlap)}")
+        return
+
+    if not team_a_names or not team_b_names:
+        st.warning("Select players for both teams to record a result.")
+        return
+
+    # Convert to Player objects
+    team_a = [player_map[name] for name in team_a_names]
+    team_b = [player_map[name] for name in team_b_names]
+
+    # Show team summaries
+    col1, col2 = st.columns(2)
+    with col1:
+        st.write(f"**Team A** ({len(team_a)} players, avg Elo: {average_elo(team_a):.0f})")
+    with col2:
+        st.write(f"**Team B** ({len(team_b)} players, avg Elo: {average_elo(team_b):.0f})")
+
+    st.divider()
+
+    # Score input
     st.subheader("Enter Score")
 
     col1, col2, col3 = st.columns([2, 1, 2])
@@ -546,7 +622,7 @@ def page_record_result() -> None:
 
     if st.button("Submit Result", type="primary"):
         # Calculate Elo changes
-        changes = calculate_elo_changes(split.team_a, split.team_b, score_a, score_b)
+        changes = calculate_elo_changes(team_a, team_b, score_a, score_b)
 
         # Display changes
         st.subheader("Elo Changes")
@@ -554,30 +630,22 @@ def page_record_result() -> None:
         col1, col2 = st.columns(2)
         with col1:
             st.write("**Team A:**")
-            for p in split.team_a:
+            for p in team_a:
                 if p.name in changes:
                     delta = changes[p.name]
                     sign = "+" if delta >= 0 else ""
                     st.write(f"- {p.name}: {sign}{delta:.1f}")
-                else:
-                    st.write(f"- {p.name}: (guest, not tracked)")
 
         with col2:
             st.write("**Team B:**")
-            for p in split.team_b:
+            for p in team_b:
                 if p.name in changes:
                     delta = changes[p.name]
                     sign = "+" if delta >= 0 else ""
                     st.write(f"- {p.name}: {sign}{delta:.1f}")
-                else:
-                    st.write(f"- {p.name}: (guest, not tracked)")
 
         # Save to database
         try:
-            # Update player Elos
-            players = load_players()
-            player_map = {p.name: p for p in players}
-
             for name, delta in changes.items():
                 if name in player_map:
                     p = player_map[name]
@@ -588,8 +656,8 @@ def page_record_result() -> None:
             # Save match record
             match = Match(
                 match_date=date.today().isoformat(),
-                team_a=[p.name for p in split.team_a],
-                team_b=[p.name for p in split.team_b],
+                team_a=[p.name for p in team_a],
+                team_b=[p.name for p in team_b],
                 score_a=score_a,
                 score_b=score_b,
             )
@@ -666,7 +734,7 @@ def page_roster() -> None:
         ]
     )
 
-    st.dataframe(df, use_container_width=True, hide_index=True)
+    st.dataframe(df, width="stretch", hide_index=True)
 
     # Edit/Delete section
     st.subheader("Edit Player")
