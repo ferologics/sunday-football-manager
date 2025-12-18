@@ -1,7 +1,19 @@
 use maud::{html, Markup, DOCTYPE};
 
+/// Auth state for layout
+pub struct AuthState {
+    pub enabled: bool,
+    pub logged_in: bool,
+}
+
+impl AuthState {
+    pub fn new(enabled: bool, logged_in: bool) -> Self {
+        Self { enabled, logged_in }
+    }
+}
+
 /// Base layout wrapper for all pages
-pub fn base(title: &str, current_page: &str, content: Markup) -> Markup {
+pub fn base(title: &str, current_page: &str, auth: &AuthState, content: Markup) -> Markup {
     html! {
         (DOCTYPE)
         html lang="en" {
@@ -26,12 +38,36 @@ pub fn base(title: &str, current_page: &str, content: Markup) -> Markup {
                     .elo-negative { color: var(--pico-del-color); }
                     .cost-breakdown { font-size: 0.875rem; color: var(--pico-muted-color); }
                     .checkbox-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 0.5rem; }
+                    .header-row { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem; margin-bottom: 1rem; }
+                    .auth-form { display: flex; gap: 0.5rem; align-items: stretch; margin: 0; }
+                    .auth-form input, .auth-form button { margin: 0; padding: 0.5rem 0.75rem; height: auto; }
+                    .auth-form input { width: 150px; }
+                    .auth-status { display: flex; gap: 0.5rem; align-items: center; }
                     "#
                 }
             }
             body {
                 main class="container" {
-                    h1 { "Sunday Football Manager" }
+                    // Header with title and auth
+                    div class="header-row" {
+                        h1 style="margin: 0;" { "Sunday Football Manager" }
+
+                        @if auth.enabled {
+                            @if auth.logged_in {
+                                div class="auth-status" {
+                                    span style="color: var(--pico-ins-color);" { "Logged in" }
+                                    form action="/api/logout" method="post" class="auth-form" {
+                                        button type="submit" class="secondary outline" { "Logout" }
+                                    }
+                                }
+                            } @else {
+                                form action="/api/login" method="post" class="auth-form" {
+                                    input type="password" name="password" placeholder="Password" required;
+                                    button type="submit" { "Login" }
+                                }
+                            }
+                        }
+                    }
 
                     // Navigation
                     nav class="nav-buttons" {

@@ -1,3 +1,4 @@
+mod auth;
 mod balance;
 mod db;
 mod elo;
@@ -16,6 +17,7 @@ use tower_http::trace::TraceLayer;
 #[derive(Clone)]
 pub struct AppState {
     pub db: PgPool,
+    pub auth_password: Option<String>,
 }
 
 #[tokio::main]
@@ -43,7 +45,14 @@ async fn main() {
         .await
         .expect("Failed to run migrations");
 
-    let state = Arc::new(AppState { db: pool });
+    let auth_password = std::env::var("AUTH_PASSWORD").ok();
+    if auth_password.is_some() {
+        tracing::info!("Auth password configured - login required for mutations");
+    } else {
+        tracing::warn!("No AUTH_PASSWORD set - site is unprotected");
+    }
+
+    let state = Arc::new(AppState { db: pool, auth_password });
 
     let router = Router::new()
         // Pages
@@ -51,6 +60,9 @@ async fn main() {
         .route("/roster", get(views::roster::page))
         .route("/record", get(views::record::page))
         .route("/history", get(views::history::page))
+        // Auth
+        .route("/api/login", post(auth::login))
+        .route("/api/logout", post(auth::logout))
         // API - Players
         .route("/api/players", post(views::roster::create_player))
         .route("/api/players/{id}", put(views::roster::update_player))

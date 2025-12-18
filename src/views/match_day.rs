@@ -1,19 +1,21 @@
+use crate::auth::is_authenticated;
 use crate::balance::balance_teams;
 use crate::elo::average_elo;
 use crate::models::{TeamSplit, TAG_WEIGHTS};
-use crate::views::layout::{base, render_tags};
+use crate::views::layout::{base, render_tags, AuthState};
 use crate::{db, AppState};
 use axum::{
     extract::State,
     response::{Html, IntoResponse},
 };
-use axum_extra::extract::Form;
+use axum_extra::extract::{cookie::CookieJar, Form};
 use maud::{html, Markup};
 use std::sync::Arc;
 
 /// Team Generator page - check-in and team generation
-pub async fn page(State(state): State<Arc<AppState>>) -> impl IntoResponse {
+pub async fn page(State(state): State<Arc<AppState>>, jar: CookieJar) -> impl IntoResponse {
     let players = db::get_all_players(&state.db).await.unwrap_or_default();
+    let auth = AuthState::new(state.auth_password.is_some(), is_authenticated(&jar, &state));
 
     let content = html! {
         h2 { "Team Generator" }
@@ -88,7 +90,7 @@ pub async fn page(State(state): State<Arc<AppState>>) -> impl IntoResponse {
         }
     };
 
-    Html(base("Team Generator", "match_day", content).into_string())
+    Html(base("Team Generator", "match_day", &auth, content).into_string())
 }
 
 /// Generate teams endpoint (htmx)

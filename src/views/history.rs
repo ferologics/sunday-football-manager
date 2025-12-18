@@ -1,10 +1,12 @@
+use crate::auth::is_authenticated;
 use crate::models::{EloSnapshot, Match};
-use crate::views::layout::{base, render_elo_delta};
+use crate::views::layout::{base, render_elo_delta, AuthState};
 use crate::{db, AppState};
 use axum::{
     extract::State,
     response::{Html, IntoResponse},
 };
+use axum_extra::extract::cookie::CookieJar;
 use maud::{html, Markup};
 use serde_json::json;
 use std::collections::HashMap;
@@ -82,9 +84,10 @@ fn build_elo_timeline(matches: &[Match], players: &[crate::models::Player]) -> s
 }
 
 /// History page - match history
-pub async fn page(State(state): State<Arc<AppState>>) -> impl IntoResponse {
+pub async fn page(State(state): State<Arc<AppState>>, jar: CookieJar) -> impl IntoResponse {
     let matches = db::get_all_matches(&state.db).await.unwrap_or_default();
     let players = db::get_all_players(&state.db).await.unwrap_or_default();
+    let auth = AuthState::new(state.auth_password.is_some(), is_authenticated(&jar, &state));
 
     let chart_data = build_elo_timeline(&matches, &players);
     let chart_data_json = serde_json::to_string(&chart_data).unwrap_or_else(|_| "{}".to_string());
@@ -169,7 +172,7 @@ pub async fn page(State(state): State<Arc<AppState>>) -> impl IntoResponse {
         }
     };
 
-    Html(base("History", "history", content).into_string())
+    Html(base("History", "history", &auth, content).into_string())
 }
 
 /// Render a single match as a collapsible card

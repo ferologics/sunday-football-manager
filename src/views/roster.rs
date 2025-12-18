@@ -1,5 +1,6 @@
+use crate::auth::is_authenticated;
 use crate::models::{NewPlayer, UpdatePlayer, TAG_WEIGHTS};
-use crate::views::layout::{base, render_tags};
+use crate::views::layout::{base, render_tags, AuthState};
 use crate::{db, AppState};
 use axum::{
     extract::{Path, State},
@@ -7,12 +8,15 @@ use axum::{
     response::{Html, IntoResponse},
     Form,
 };
+use axum_extra::extract::cookie::CookieJar;
 use maud::{html, Markup};
 use std::sync::Arc;
 
 /// Roster page - player management
-pub async fn page(State(state): State<Arc<AppState>>) -> impl IntoResponse {
+pub async fn page(State(state): State<Arc<AppState>>, jar: CookieJar) -> impl IntoResponse {
     let players = db::get_all_players(&state.db).await.unwrap_or_default();
+    let logged_in = is_authenticated(&jar, &state);
+    let auth = AuthState::new(state.auth_password.is_some(), logged_in);
 
     let content = html! {
         h2 { "Roster Management" }
@@ -22,25 +26,28 @@ pub async fn page(State(state): State<Arc<AppState>>) -> impl IntoResponse {
             summary { "Add New Player" }
             form hx-post="/api/players" hx-target="#player-list" hx-swap="innerHTML" {
                 div class="grid" {
-                    input type="text" name="name" placeholder="Player name" required;
-                    input type="number" name="elo" placeholder="Starting Elo" value="1200" min="800" max="2000";
+                    input type="text" name="name" placeholder="Player name" required disabled[!logged_in];
+                    input type="number" name="elo" placeholder="Starting Elo" value="1200" min="800" max="2000" disabled[!logged_in];
                 }
                 fieldset {
                     legend { "Tags" }
                     div class="checkbox-grid" {
                         @for (tag, _) in TAG_WEIGHTS {
                             label {
-                                input type="checkbox" name="tags" value=(tag);
+                                input type="checkbox" name="tags" value=(tag) disabled[!logged_in];
                                 (tag)
                             }
                         }
                         label {
-                            input type="checkbox" name="tags" value="GK";
+                            input type="checkbox" name="tags" value="GK" disabled[!logged_in];
                             "GK"
                         }
                     }
                 }
-                button type="submit" { "Add Player" }
+                button type="submit" disabled[!logged_in] { "Add Player" }
+                @if !logged_in {
+                    p class="secondary" style="margin-top: 0.5rem; font-size: 0.875rem;" { "Login to add players" }
+                }
             }
         }
 
@@ -49,15 +56,15 @@ pub async fn page(State(state): State<Arc<AppState>>) -> impl IntoResponse {
         // Player list
         h3 { "Current Roster (" (players.len()) " players)" }
         div id="player-list" {
-            (render_player_list(&players))
+            (render_player_list(&players, logged_in))
         }
     };
 
-    Html(base("Roster", "roster", content).into_string())
+    Html(base("Roster", "roster", &auth, content).into_string())
 }
 
 /// Render the player list (used for full page and htmx updates)
-fn render_player_list(players: &[crate::models::Player]) -> Markup {
+fn render_player_list(players: &[crate::models::Player], logged_in: bool) -> Markup {
     if players.is_empty() {
         return html! {
             p { "No players yet. Add your first player above!" }
@@ -89,6 +96,7 @@ fn render_player_list(players: &[crate::models::Player]) -> Markup {
                                 hx-target="#player-list"
                                 hx-swap="innerHTML"
                                 hx-confirm=(format!("Delete {}?", player.name))
+                                disabled[!logged_in]
                             {
                                 "Delete"
                             }
@@ -103,8 +111,13 @@ fn render_player_list(players: &[crate::models::Player]) -> Markup {
 /// Create a new player (htmx endpoint)
 pub async fn create_player(
     State(state): State<Arc<AppState>>,
+    jar: CookieJar,
     Form(form): Form<NewPlayerForm>,
 ) -> impl IntoResponse {
+    if !is_authenticated(&jar, &state) {
+        return crate::auth::unauthorized().into_response();
+    }
+
     // Combine tags from checkboxes
     let tags = form.tags.unwrap_or_default().join(",");
 
@@ -117,13 +130,13 @@ pub async fn create_player(
     match db::create_player(&state.db, &new_player).await {
         Ok(_) => {
             let players = db::get_all_players(&state.db).await.unwrap_or_default();
-            Html(render_player_list(&players).into_string())
+            Html(render_player_list(&players, true).into_string()).into_response()
         }
         Err(e) => {
             tracing::error!("Failed to create player: {}", e);
             Html(html! {
                 p class="error" { "Failed to create player: name may already exist" }
-            }.into_string())
+            }.into_string()).into_response()
         }
     }
 }
@@ -139,13 +152,18 @@ pub struct NewPlayerForm {
 /// Update a player (htmx endpoint)
 pub async fn update_player(
     State(state): State<Arc<AppState>>,
+    jar: CookieJar,
     Path(id): Path<i32>,
     Form(form): Form<UpdatePlayer>,
 ) -> impl IntoResponse {
+    if !is_authenticated(&jar, &state) {
+        return crate::auth::unauthorized().into_response();
+    }
+
     match db::update_player(&state.db, id, &form).await {
         Ok(Some(_)) => {
             let players = db::get_all_players(&state.db).await.unwrap_or_default();
-            Html(render_player_list(&players).into_string()).into_response()
+            Html(render_player_list(&players, true).into_string()).into_response()
         }
         Ok(None) => (StatusCode::NOT_FOUND, "Player not found").into_response(),
         Err(e) => {
@@ -158,12 +176,17 @@ pub async fn update_player(
 /// Delete a player (htmx endpoint)
 pub async fn delete_player(
     State(state): State<Arc<AppState>>,
+    jar: CookieJar,
     Path(id): Path<i32>,
 ) -> impl IntoResponse {
+    if !is_authenticated(&jar, &state) {
+        return crate::auth::unauthorized().into_response();
+    }
+
     match db::delete_player(&state.db, id).await {
         Ok(true) => {
             let players = db::get_all_players(&state.db).await.unwrap_or_default();
-            Html(render_player_list(&players).into_string()).into_response()
+            Html(render_player_list(&players, true).into_string()).into_response()
         }
         Ok(false) => (StatusCode::NOT_FOUND, "Player not found").into_response(),
         Err(e) => {

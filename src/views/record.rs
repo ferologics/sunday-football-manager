@@ -1,20 +1,23 @@
+use crate::auth::is_authenticated;
 use crate::elo::calculate_elo_changes;
 use crate::models::{EloSnapshot, Player, MAX_PER_TEAM};
-use crate::views::layout::{base, render_elo_delta};
+use crate::views::layout::{base, render_elo_delta, AuthState};
 use crate::{db, AppState};
 use axum::{
     extract::State,
     response::{Html, IntoResponse},
 };
-use axum_extra::extract::Form;
+use axum_extra::extract::{cookie::CookieJar, Form};
 use maud::{html, Markup};
 use serde_json::json;
 use std::collections::HashMap;
 use std::sync::Arc;
 
 /// Record Result page
-pub async fn page(State(state): State<Arc<AppState>>) -> impl IntoResponse {
+pub async fn page(State(state): State<Arc<AppState>>, jar: CookieJar) -> impl IntoResponse {
     let players = db::get_all_players(&state.db).await.unwrap_or_default();
+    let logged_in = is_authenticated(&jar, &state);
+    let auth = AuthState::new(state.auth_password.is_some(), logged_in);
 
     // Serialize players for JavaScript
     let players_json: Vec<serde_json::Value> = players
@@ -132,7 +135,10 @@ pub async fn page(State(state): State<Arc<AppState>>) -> impl IntoResponse {
                 }
             }
 
-            button type="submit" { "Submit Result" }
+            button type="submit" disabled[!logged_in] { "Submit Result" }
+            @if !logged_in {
+                p class="secondary" style="margin-top: 0.5rem; font-size: 0.875rem;" { "Login to record results" }
+            }
         }
 
         // Result display area
@@ -258,14 +264,21 @@ pub async fn page(State(state): State<Arc<AppState>>) -> impl IntoResponse {
         }
     };
 
-    Html(base("Record Result", "record", content).into_string())
+    Html(base("Record Result", "record", &auth, content).into_string())
 }
 
 /// Submit match result (htmx endpoint)
 pub async fn submit_result(
     State(state): State<Arc<AppState>>,
+    jar: CookieJar,
     Form(form): Form<RecordForm>,
 ) -> impl IntoResponse {
+    if !is_authenticated(&jar, &state) {
+        return Html(html! {
+            p class="error" { "Unauthorized. Please log in." }
+        }.into_string());
+    }
+
     let team_a_names = form.team_a.unwrap_or_default();
     let team_b_names = form.team_b.unwrap_or_default();
 
