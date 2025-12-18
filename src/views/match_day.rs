@@ -26,7 +26,7 @@ pub async fn page(State(state): State<Arc<AppState>>, jar: CookieJar) -> impl In
             p { "No players in database. Add players in the Roster page." }
         } @else {
             form id="checkin-form" {
-                p { "Select players for today's match:" }
+                p { "Select players for today's match: " span id="player-count" class="secondary" { "0 / 14" } }
                 div class="checkbox-grid" {
                     @for player in &players {
                         label {
@@ -68,13 +68,16 @@ pub async fn page(State(state): State<Arc<AppState>>, jar: CookieJar) -> impl In
             p class="secondary" { "Select players and click 'Generate Teams'" }
         }
 
-        // Script to enable/disable buttons based on selection
+        // Script to enable/disable buttons and update counter
         script {
             (maud::PreEscaped(r#"
                 const buttons = document.querySelectorAll('#checkin-form button[type="submit"]');
+                const counter = document.getElementById('player-count');
 
                 function updateState() {
                     const checked = document.querySelectorAll('.player-checkbox:checked').length;
+                    // Update counter
+                    counter.textContent = checked + ' / 14';
                     // Enable buttons when at least 2 players selected (minimum for teams)
                     buttons.forEach(btn => btn.disabled = checked < 2);
                 }
