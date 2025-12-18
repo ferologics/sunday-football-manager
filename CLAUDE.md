@@ -34,8 +34,14 @@ Rust web app using Axum, hosted on Render.com with Neon PostgreSQL.
 - `src/views/` - Maud HTML templates for each page
 
 **Environment:**
-- `.env` - Production config (DATABASE_URL)
+- `.env` - Production config (DATABASE_URL, AUTH_PASSWORD)
 - `.env.local` - Local overrides (optional, loaded first)
+
+**Authentication:**
+- Set `AUTH_PASSWORD` env var to enable login
+- If not set, site runs unprotected (for dev)
+- Protects: add/delete players, record results
+- Read-only pages always accessible
 
 **Database:**
 - PostgreSQL via Neon (requires `?sslmode=require`)

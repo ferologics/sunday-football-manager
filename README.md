@@ -92,9 +92,21 @@ just test    # Run tests
 just clean   # Clean build artifacts
 ```
 
+## Authentication
+
+Set `AUTH_PASSWORD` env var to protect the site. When set:
+- Login form appears in the header
+- Add/delete players requires login
+- Recording match results requires login
+- Viewing pages is always allowed
+
+If not set, the site runs without auth (useful for local dev).
+
 ## Deployment
 
-Deployed on Render with Docker. Set `DATABASE_URL` env var to your Neon connection string.
+Deployed on Render with Docker. Set these env vars:
+- `DATABASE_URL` - Neon connection string
+- `AUTH_PASSWORD` - Shared password for the site
 
 ## Project Structure
 
