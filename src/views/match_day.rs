@@ -15,7 +15,10 @@ use std::sync::Arc;
 /// Team Generator page - check-in and team generation
 pub async fn page(State(state): State<Arc<AppState>>, jar: CookieJar) -> impl IntoResponse {
     let players = db::get_all_players(&state.db).await.unwrap_or_default();
-    let auth = AuthState::new(state.auth_password.is_some(), is_authenticated(&jar, &state));
+    let auth = AuthState::new(
+        state.auth_password.is_some(),
+        is_authenticated(&jar, &state),
+    );
 
     let content = html! {
         h2 { "Team Generator" }
@@ -116,26 +119,35 @@ pub async fn generate_teams(
     tracing::info!("Parsed player_ids: {:?}", player_ids);
 
     if player_ids.len() < 2 {
-        return Html(html! {
-            p class="error" { "Select at least 2 players" }
-        }.into_string());
+        return Html(
+            html! {
+                p class="error" { "Select at least 2 players" }
+            }
+            .into_string(),
+        );
     }
 
     let players = match db::get_players_by_ids(&state.db, &player_ids).await {
         Ok(p) => p,
         Err(e) => {
             tracing::error!("Failed to get players: {}", e);
-            return Html(html! {
-                p class="error" { "Failed to load players" }
-            }.into_string());
+            return Html(
+                html! {
+                    p class="error" { "Failed to load players" }
+                }
+                .into_string(),
+            );
         }
     };
 
     match balance_teams(&players, false) {
         Some(split) => Html(render_teams(&split).into_string()),
-        None => Html(html! {
-            p class="error" { "Could not generate teams" }
-        }.into_string()),
+        None => Html(
+            html! {
+                p class="error" { "Could not generate teams" }
+            }
+            .into_string(),
+        ),
     }
 }
 
@@ -151,26 +163,35 @@ pub async fn shuffle_teams(
         .collect();
 
     if player_ids.len() < 2 {
-        return Html(html! {
-            p class="error" { "Select at least 2 players" }
-        }.into_string());
+        return Html(
+            html! {
+                p class="error" { "Select at least 2 players" }
+            }
+            .into_string(),
+        );
     }
 
     let players = match db::get_players_by_ids(&state.db, &player_ids).await {
         Ok(p) => p,
         Err(e) => {
             tracing::error!("Failed to get players: {}", e);
-            return Html(html! {
-                p class="error" { "Failed to load players" }
-            }.into_string());
+            return Html(
+                html! {
+                    p class="error" { "Failed to load players" }
+                }
+                .into_string(),
+            );
         }
     };
 
     match balance_teams(&players, true) {
         Some(split) => Html(render_teams(&split).into_string()),
-        None => Html(html! {
-            p class="error" { "Could not generate teams" }
-        }.into_string()),
+        None => Html(
+            html! {
+                p class="error" { "Could not generate teams" }
+            }
+            .into_string(),
+        ),
     }
 }
 

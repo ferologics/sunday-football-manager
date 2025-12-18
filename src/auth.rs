@@ -55,9 +55,7 @@ pub async fn login(
 
 /// Handle logout POST
 pub async fn logout(jar: CookieJar) -> impl IntoResponse {
-    let cookie = Cookie::build(AUTH_COOKIE_NAME)
-        .path("/")
-        .build();
+    let cookie = Cookie::build(AUTH_COOKIE_NAME).path("/").build();
     (jar.remove(cookie), Redirect::to("/"))
 }
 

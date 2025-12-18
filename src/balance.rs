@@ -35,8 +35,16 @@ pub fn balance_teams(players: &[Player], randomize: bool) -> Option<TeamSplit> {
     let team_size = players.len() / 2;
 
     // Identify goalkeepers
-    let gks: Vec<_> = players.iter().filter(|p| p.has_tag(Tag::Gk)).cloned().collect();
-    let non_gks: Vec<_> = players.iter().filter(|p| !p.has_tag(Tag::Gk)).cloned().collect();
+    let gks: Vec<_> = players
+        .iter()
+        .filter(|p| p.has_tag(Tag::Gk))
+        .cloned()
+        .collect();
+    let non_gks: Vec<_> = players
+        .iter()
+        .filter(|p| !p.has_tag(Tag::Gk))
+        .cloned()
+        .collect();
 
     let mut all_splits: Vec<TeamSplit> = Vec::new();
     let mut best_split: Option<TeamSplit> = None;
@@ -146,11 +154,7 @@ pub fn balance_teams(players: &[Player], randomize: bool) -> Option<TeamSplit> {
 }
 
 /// Pick the final split - either best or random from near-optimal
-fn pick_split(
-    best: Option<TeamSplit>,
-    all: Vec<TeamSplit>,
-    randomize: bool,
-) -> Option<TeamSplit> {
+fn pick_split(best: Option<TeamSplit>, all: Vec<TeamSplit>, randomize: bool) -> Option<TeamSplit> {
     let best = best?;
 
     if randomize && !all.is_empty() {
@@ -207,8 +211,16 @@ mod tests {
         let split = balance_teams(&players, false).unwrap();
 
         // Should split playmakers between teams
-        let pm_a = split.team_a.iter().filter(|p| p.has_tag(Tag::Playmaker)).count();
-        let pm_b = split.team_b.iter().filter(|p| p.has_tag(Tag::Playmaker)).count();
+        let pm_a = split
+            .team_a
+            .iter()
+            .filter(|p| p.has_tag(Tag::Playmaker))
+            .count();
+        let pm_b = split
+            .team_b
+            .iter()
+            .filter(|p| p.has_tag(Tag::Playmaker))
+            .count();
         assert_eq!(pm_a, 1);
         assert_eq!(pm_b, 1);
     }
@@ -308,8 +320,8 @@ mod tests {
         let players = vec![
             make_player(1, "Star1", 1200.0, "PLAYMAKER,RUNNER,DEF"), // 50+40+20 = 110
             make_player(2, "Star2", 1200.0, "PLAYMAKER,RUNNER,DEF"), // 50+40+20 = 110
-            make_player(3, "Role1", 1200.0, "DEF"),                   // 20
-            make_player(4, "Role2", 1200.0, "DEF"),                   // 20
+            make_player(3, "Role1", 1200.0, "DEF"),                  // 20
+            make_player(4, "Role2", 1200.0, "DEF"),                  // 20
         ];
 
         let split = balance_teams(&players, false).unwrap();

@@ -24,7 +24,8 @@ pub async fn page(State(state): State<Arc<AppState>>, jar: CookieJar) -> impl In
         .iter()
         .map(|p| json!({ "id": p.id, "name": p.name, "elo": p.elo }))
         .collect();
-    let players_json_str = serde_json::to_string(&players_json).unwrap_or_else(|_| "[]".to_string());
+    let players_json_str =
+        serde_json::to_string(&players_json).unwrap_or_else(|_| "[]".to_string());
 
     let content = html! {
         h2 { "Record Match Result" }
@@ -364,9 +365,12 @@ pub async fn submit_result(
     Form(form): Form<RecordForm>,
 ) -> impl IntoResponse {
     if !is_authenticated(&jar, &state) {
-        return Html(html! {
-            p class="error" { "Unauthorized. Please log in." }
-        }.into_string());
+        return Html(
+            html! {
+                p class="error" { "Unauthorized. Please log in." }
+            }
+            .into_string(),
+        );
     }
 
     let team_a_names = form.team_a.unwrap_or_default();
@@ -378,18 +382,31 @@ pub async fn submit_result(
 
     // Validation
     if team_a_names.is_empty() || team_b_names.is_empty() {
-        return Html(html! {
-            p class="error" { "Both teams must have players" }
-        }.into_string());
+        return Html(
+            html! {
+                p class="error" { "Both teams must have players" }
+            }
+            .into_string(),
+        );
     }
 
     // Check for overlap
-    let overlap: Vec<_> = team_a_names.iter().filter(|n| team_b_names.contains(n)).collect();
+    let overlap: Vec<_> = team_a_names
+        .iter()
+        .filter(|n| team_b_names.contains(n))
+        .collect();
     if !overlap.is_empty() {
-        let overlap_str = overlap.iter().map(|s| s.as_str()).collect::<Vec<_>>().join(", ");
-        return Html(html! {
-            p class="error" { "Players cannot be on both teams: " (overlap_str) }
-        }.into_string());
+        let overlap_str = overlap
+            .iter()
+            .map(|s| s.as_str())
+            .collect::<Vec<_>>()
+            .join(", ");
+        return Html(
+            html! {
+                p class="error" { "Players cannot be on both teams: " (overlap_str) }
+            }
+            .into_string(),
+        );
     }
 
     // Load players from database
@@ -397,13 +414,17 @@ pub async fn submit_result(
         Ok(p) => p,
         Err(e) => {
             tracing::error!("Failed to load players: {}", e);
-            return Html(html! {
-                p class="error" { "Failed to load players" }
-            }.into_string());
+            return Html(
+                html! {
+                    p class="error" { "Failed to load players" }
+                }
+                .into_string(),
+            );
         }
     };
 
-    let player_map: HashMap<&str, &Player> = all_players.iter().map(|p| (p.name.as_str(), p)).collect();
+    let player_map: HashMap<&str, &Player> =
+        all_players.iter().map(|p| (p.name.as_str(), p)).collect();
 
     let team_a: Vec<Player> = team_a_names
         .iter()
@@ -416,9 +437,12 @@ pub async fn submit_result(
         .collect();
 
     if team_a.len() != team_a_names.len() || team_b.len() != team_b_names.len() {
-        return Html(html! {
-            p class="error" { "Some players not found in database" }
-        }.into_string());
+        return Html(
+            html! {
+                p class="error" { "Some players not found in database" }
+            }
+            .into_string(),
+        );
     }
 
     // Warn about uneven teams (soft check with confirmation)
@@ -466,9 +490,12 @@ pub async fn submit_result(
         Ok(tx) => tx,
         Err(e) => {
             tracing::error!("Failed to start transaction: {}", e);
-            return Html(html! {
-                p class="error" { "Database error" }
-            }.into_string());
+            return Html(
+                html! {
+                    p class="error" { "Database error" }
+                }
+                .into_string(),
+            );
         }
     };
 
@@ -480,9 +507,12 @@ pub async fn submit_result(
             let new_elo = change.before + effective_delta;
             if let Err(e) = db::update_player_elo(&mut *tx, player.id, new_elo).await {
                 tracing::error!("Failed to update Elo for {}: {}", player.name, e);
-                return Html(html! {
-                    p class="error" { "Failed to update player Elo" }
-                }.into_string());
+                return Html(
+                    html! {
+                        p class="error" { "Failed to update player Elo" }
+                    }
+                    .into_string(),
+                );
             }
         }
     }
@@ -497,19 +527,27 @@ pub async fn submit_result(
         score_a,
         score_b,
         snapshot_json,
-    ).await {
+    )
+    .await
+    {
         tracing::error!("Failed to save match: {}", e);
-        return Html(html! {
-            p class="error" { "Failed to save match record" }
-        }.into_string());
+        return Html(
+            html! {
+                p class="error" { "Failed to save match record" }
+            }
+            .into_string(),
+        );
     }
 
     // Commit the transaction
     if let Err(e) = tx.commit().await {
         tracing::error!("Failed to commit transaction: {}", e);
-        return Html(html! {
-            p class="error" { "Failed to save changes" }
-        }.into_string());
+        return Html(
+            html! {
+                p class="error" { "Failed to save changes" }
+            }
+            .into_string(),
+        );
     }
 
     // Render success with Elo changes

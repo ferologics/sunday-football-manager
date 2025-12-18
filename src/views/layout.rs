@@ -144,7 +144,11 @@ pub fn base(title: &str, current_page: &str, auth: &AuthState, content: Markup) 
 
 /// Render player tags as badges
 pub fn render_tags(tags: &str) -> Markup {
-    let tag_list: Vec<_> = tags.split(',').map(|s| s.trim()).filter(|s| !s.is_empty()).collect();
+    let tag_list: Vec<_> = tags
+        .split(',')
+        .map(|s| s.trim())
+        .filter(|s| !s.is_empty())
+        .collect();
     html! {
         @for tag in tag_list {
             span class="tag" { (tag) }
@@ -155,7 +159,11 @@ pub fn render_tags(tags: &str) -> Markup {
 /// Format Elo delta with color
 pub fn render_elo_delta(delta: f32) -> Markup {
     let sign = if delta >= 0.0 { "+" } else { "" };
-    let class = if delta >= 0.0 { "elo-positive" } else { "elo-negative" };
+    let class = if delta >= 0.0 {
+        "elo-positive"
+    } else {
+        "elo-negative"
+    };
     html! {
         span class=(class) { (sign) (format!("{:.0}", delta)) }
     }

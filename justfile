@@ -1,5 +1,6 @@
 alias b := build
 alias c := check
+alias f := format
 alias r := run
 alias w := watch
 
@@ -14,9 +15,12 @@ build-release:
 changelog VERSION:
   ./scripts/changelog.sh {{VERSION}}
 
-check:
+check: format
   cargo check
   cargo clippy
+
+format:
+  cargo fmt
 
 clean:
   cargo clean

@@ -134,16 +134,24 @@ pub async fn create_player(
     match db::create_player(&state.db, &new_player).await {
         Ok(player) => {
             let players = db::get_all_players(&state.db).await.unwrap_or_default();
-            Html(html! {
-                p class="success-message" { "Added " (player.name) "!" }
-                (render_player_list(&players, true))
-            }.into_string()).into_response()
+            Html(
+                html! {
+                    p class="success-message" { "Added " (player.name) "!" }
+                    (render_player_list(&players, true))
+                }
+                .into_string(),
+            )
+            .into_response()
         }
         Err(e) => {
             tracing::error!("Failed to create player: {}", e);
-            Html(html! {
-                p class="error" { "Failed to create player: name may already exist" }
-            }.into_string()).into_response()
+            Html(
+                html! {
+                    p class="error" { "Failed to create player: name may already exist" }
+                }
+                .into_string(),
+            )
+            .into_response()
         }
     }
 }

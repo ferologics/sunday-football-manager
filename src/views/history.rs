@@ -63,11 +63,9 @@ fn build_elo_timeline(matches: &[Match], players: &[Player]) -> serde_json::Valu
     // Convert to chart.js format
     let mut datasets: Vec<serde_json::Value> = Vec::new();
     let colors = [
-        "#3498db", "#e74c3c", "#2ecc71", "#9b59b6", "#f39c12",
-        "#1abc9c", "#e67e22", "#34495e", "#16a085", "#c0392b",
-        "#8e44ad", "#27ae60", "#d35400", "#2980b9", "#f1c40f",
-        "#7f8c8d", "#95a5a6", "#d63031", "#00b894", "#0984e3",
-        "#6c5ce7", "#fd79a8",
+        "#3498db", "#e74c3c", "#2ecc71", "#9b59b6", "#f39c12", "#1abc9c", "#e67e22", "#34495e",
+        "#16a085", "#c0392b", "#8e44ad", "#27ae60", "#d35400", "#2980b9", "#f1c40f", "#7f8c8d",
+        "#95a5a6", "#d63031", "#00b894", "#0984e3", "#6c5ce7", "#fd79a8",
     ];
 
     for (i, player) in players.iter().enumerate() {
@@ -91,10 +89,14 @@ fn build_elo_timeline(matches: &[Match], players: &[Player]) -> serde_json::Valu
 pub async fn page(State(state): State<Arc<AppState>>, jar: CookieJar) -> impl IntoResponse {
     let matches = db::get_all_matches(&state.db).await.unwrap_or_default();
     let players = db::get_all_players(&state.db).await.unwrap_or_default();
-    let auth = AuthState::new(state.auth_password.is_some(), is_authenticated(&jar, &state));
+    let auth = AuthState::new(
+        state.auth_password.is_some(),
+        is_authenticated(&jar, &state),
+    );
 
     // Build player ID → name map for display
-    let player_names: HashMap<i32, String> = players.iter().map(|p| (p.id, p.name.clone())).collect();
+    let player_names: HashMap<i32, String> =
+        players.iter().map(|p| (p.id, p.name.clone())).collect();
 
     let chart_data = build_elo_timeline(&matches, &players);
     let chart_data_json = serde_json::to_string(&chart_data).unwrap_or_else(|_| "{}".to_string());

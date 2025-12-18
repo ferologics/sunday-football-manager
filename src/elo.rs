@@ -136,14 +136,8 @@ mod tests {
 
     #[test]
     fn test_elo_changes_equal_teams() {
-        let team_a = vec![
-            make_player(1, "A1", 1200.0),
-            make_player(2, "A2", 1200.0),
-        ];
-        let team_b = vec![
-            make_player(3, "B1", 1200.0),
-            make_player(4, "B2", 1200.0),
-        ];
+        let team_a = vec![make_player(1, "A1", 1200.0), make_player(2, "A2", 1200.0)];
+        let team_b = vec![make_player(3, "B1", 1200.0), make_player(4, "B2", 1200.0)];
         let participation = HashMap::new(); // All 100%
 
         // Team A wins 2-1
@@ -195,17 +189,14 @@ mod tests {
         let und_delta = changes.get(&2).unwrap().delta;
 
         assert!(fav_delta < -20.0); // Big loss
-        assert!(und_delta > 20.0);  // Big gain
+        assert!(und_delta > 20.0); // Big gain
     }
 
     #[test]
     fn test_elo_handicap_6v7() {
         // Team A has 1 player, Team B has 2 (simulates 6v7)
         let team_a = vec![make_player(1, "A", 1200.0)];
-        let team_b = vec![
-            make_player(2, "B1", 1200.0),
-            make_player(3, "B2", 1200.0),
-        ];
+        let team_b = vec![make_player(2, "B1", 1200.0), make_player(3, "B2", 1200.0)];
         let participation = HashMap::new(); // All 100%
 
         // Draw - Team A should gain because they were handicapped
@@ -223,10 +214,7 @@ mod tests {
             make_player(1, "A1", 1200.0),
             make_player(2, "A2", 1200.0), // injured
         ];
-        let team_b = vec![
-            make_player(3, "B1", 1200.0),
-            make_player(4, "B2", 1200.0),
-        ];
+        let team_b = vec![make_player(3, "B1", 1200.0), make_player(4, "B2", 1200.0)];
 
         let mut participation = HashMap::new();
         participation.insert(2, 0.5); // Player ID 2 (A2) played 50%
