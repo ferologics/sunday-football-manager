@@ -43,7 +43,10 @@ pub async fn page(State(state): State<Arc<AppState>>, jar: CookieJar) -> impl In
                         }
                     }
                 }
-                button type="submit" disabled[!logged_in] { "Add Player" }
+                button type="submit" disabled[!logged_in] hx-indicator="#add-spinner" {
+                    "Add Player"
+                    span id="add-spinner" class="htmx-indicator spinner" {}
+                }
                 @if !logged_in {
                     p class="secondary" style="margin-top: 0.5rem; font-size: 0.875rem;" { "Login to add players" }
                 }

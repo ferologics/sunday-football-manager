@@ -160,7 +160,10 @@ pub async fn page(State(state): State<Arc<AppState>>, jar: CookieJar) -> impl In
                 }
             }
 
-            button type="submit" disabled[!logged_in] { "Submit Result" }
+            button type="submit" disabled[!logged_in] hx-indicator="#submit-spinner" {
+                "Submit Result"
+                span id="submit-spinner" class="htmx-indicator spinner" {}
+            }
             @if !logged_in {
                 p class="secondary" style="margin-top: 0.5rem; font-size: 0.875rem;" { "Login to record results" }
             }
@@ -369,6 +372,10 @@ pub async fn submit_result(
     let team_a_names = form.team_a.unwrap_or_default();
     let team_b_names = form.team_b.unwrap_or_default();
 
+    // Validate scores (0-50 range)
+    let score_a = form.score_a.clamp(0, 50);
+    let score_b = form.score_b.clamp(0, 50);
+
     // Validation
     if team_a_names.is_empty() || team_b_names.is_empty() {
         return Html(html! {
@@ -448,7 +455,7 @@ pub async fn submit_result(
     }
 
     // Calculate Elo changes with handicap system (keyed by player ID)
-    let elo_changes = calculate_elo_changes(&team_a, &team_b, form.score_a, form.score_b, &participation);
+    let elo_changes = calculate_elo_changes(&team_a, &team_b, score_a, score_b, &participation);
 
     // Build snapshot (keyed by player ID)
     let snapshot: HashMap<i32, EloSnapshot> = elo_changes.clone();
@@ -487,8 +494,8 @@ pub async fn submit_result(
         &mut *tx,
         &team_a_ids,
         &team_b_ids,
-        form.score_a,
-        form.score_b,
+        score_a,
+        score_b,
         snapshot_json,
     ).await {
         tracing::error!("Failed to save match: {}", e);
@@ -506,7 +513,7 @@ pub async fn submit_result(
     }
 
     // Render success with Elo changes
-    Html(render_result(&team_a, &team_b, form.score_a, form.score_b, &elo_changes).into_string())
+    Html(render_result(&team_a, &team_b, score_a, score_b, &elo_changes).into_string())
 }
 
 /// Form data for recording a match

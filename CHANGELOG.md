@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.3.3
+
+### Added
+
+- **Loading spinners**: Visual feedback on Generate Teams, Add Player, and Submit Result buttons
+
+### Fixed
+
+- **Server-side score validation**: Scores now clamped to 0-50 range
+
 ## 0.3.2
 
 ### Changed

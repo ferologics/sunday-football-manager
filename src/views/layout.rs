@@ -57,6 +57,20 @@ pub fn base(title: &str, current_page: &str, auth: &AuthState, content: Markup) 
                         70% { opacity: 1; }
                         100% { opacity: 0; }
                     }
+                    .htmx-indicator { display: none; }
+                    .htmx-request .htmx-indicator, .htmx-request.htmx-indicator { display: inline-block; }
+                    .spinner {
+                        display: inline-block;
+                        width: 1em;
+                        height: 1em;
+                        border: 2px solid currentColor;
+                        border-right-color: transparent;
+                        border-radius: 50%;
+                        animation: spin 0.75s linear infinite;
+                        vertical-align: middle;
+                        margin-left: 0.5rem;
+                    }
+                    @keyframes spin { to { transform: rotate(360deg); } }
                     "#
                 }
             }

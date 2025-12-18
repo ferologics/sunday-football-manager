@@ -48,16 +48,20 @@ pub async fn page(State(state): State<Arc<AppState>>, jar: CookieJar) -> impl In
                         type="submit"
                         hx-post="/api/generate"
                         hx-target="#teams-display"
+                        hx-indicator="#generate-spinner"
                     {
                         "Generate Teams"
+                        span id="generate-spinner" class="htmx-indicator spinner" {}
                     }
                     button
                         type="submit"
                         class="secondary"
                         hx-post="/api/shuffle"
                         hx-target="#teams-display"
+                        hx-indicator="#shuffle-spinner"
                     {
                         "Shuffle (Re-roll)"
+                        span id="shuffle-spinner" class="htmx-indicator spinner" {}
                     }
                 }
             }
