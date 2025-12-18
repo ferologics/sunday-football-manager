@@ -16,8 +16,73 @@ use std::sync::Arc;
 pub async fn page(State(state): State<Arc<AppState>>) -> impl IntoResponse {
     let players = db::get_all_players(&state.db).await.unwrap_or_default();
 
+    // Serialize players for JavaScript
+    let players_json: Vec<serde_json::Value> = players
+        .iter()
+        .map(|p| json!({ "name": p.name, "elo": p.elo }))
+        .collect();
+    let players_json_str = serde_json::to_string(&players_json).unwrap_or_else(|_| "[]".to_string());
+
     let content = html! {
         h2 { "Record Match Result" }
+
+        // CSS for chip selector
+        style {
+            (maud::PreEscaped(r#"
+                .player-select { position: relative; }
+                .player-search { width: 100%; margin-bottom: 0.5rem; }
+                .player-dropdown {
+                    position: absolute;
+                    z-index: 100;
+                    width: 100%;
+                    max-height: 200px;
+                    overflow-y: auto;
+                    background: var(--pico-card-background-color);
+                    border: 1px solid var(--pico-muted-border-color);
+                    border-radius: var(--pico-border-radius);
+                    list-style: none;
+                    margin: 0;
+                    padding: 0;
+                    display: none;
+                }
+                .player-dropdown.open { display: block; }
+                .player-dropdown li {
+                    padding: 0.5rem 0.75rem;
+                    cursor: pointer;
+                }
+                .player-dropdown li:hover {
+                    background: var(--pico-primary-hover-background);
+                }
+                .selected-chips {
+                    display: flex;
+                    flex-wrap: wrap;
+                    gap: 0.5rem;
+                    min-height: 2.5rem;
+                    margin-top: 0.5rem;
+                }
+                .chip {
+                    display: inline-flex;
+                    align-items: center;
+                    gap: 0.25rem;
+                    padding: 0.25rem 0.5rem;
+                    background: var(--pico-primary-background);
+                    color: var(--pico-primary-inverse);
+                    border-radius: 1rem;
+                    font-size: 0.875rem;
+                }
+                .chip button {
+                    background: none;
+                    border: none;
+                    color: inherit;
+                    cursor: pointer;
+                    padding: 0 0.25rem;
+                    margin: 0;
+                    font-size: 1rem;
+                    line-height: 1;
+                }
+                .chip button:hover { opacity: 0.7; }
+            "#))
+        }
 
         form id="record-form" hx-post="/api/record" hx-target="#result-display" {
             // Team selection
@@ -25,34 +90,28 @@ pub async fn page(State(state): State<Arc<AppState>>) -> impl IntoResponse {
                 // Team A
                 fieldset {
                     legend { "Team A (max " (MAX_PER_TEAM) ")" }
-                    div class="checkbox-grid" {
-                        @for player in &players {
-                            label {
-                                input
-                                    type="checkbox"
-                                    name="team_a"
-                                    value=(player.name)
-                                    class="team-a-checkbox";
-                                (player.name) " (" (format!("{:.0}", player.elo)) ")"
-                            }
-                        }
+                    div class="player-select" data-team="a" {
+                        input
+                            type="text"
+                            class="player-search"
+                            placeholder="Search players..."
+                            autocomplete="off";
+                        ul class="player-dropdown" {}
+                        div class="selected-chips" {}
                     }
                 }
 
                 // Team B
                 fieldset {
                     legend { "Team B (max " (MAX_PER_TEAM) ")" }
-                    div class="checkbox-grid" {
-                        @for player in &players {
-                            label {
-                                input
-                                    type="checkbox"
-                                    name="team_b"
-                                    value=(player.name)
-                                    class="team-b-checkbox";
-                                (player.name) " (" (format!("{:.0}", player.elo)) ")"
-                            }
-                        }
+                    div class="player-select" data-team="b" {
+                        input
+                            type="text"
+                            class="player-search"
+                            placeholder="Search players..."
+                            autocomplete="off";
+                        ul class="player-dropdown" {}
+                        div class="selected-chips" {}
                     }
                 }
             }
@@ -79,37 +138,123 @@ pub async fn page(State(state): State<Arc<AppState>>) -> impl IntoResponse {
         // Result display area
         div id="result-display" {}
 
-        // Script to enforce max per team and prevent overlap
+        // JavaScript for chip selector
         script {
             (maud::PreEscaped(format!(r#"
-                const maxPerTeam = {};
+                const allPlayers = {players_json};
+                const maxPerTeam = {max_per_team};
+                const selectedA = new Set();
+                const selectedB = new Set();
 
-                function updateCheckboxes() {{
-                    const teamA = document.querySelectorAll('.team-a-checkbox:checked');
-                    const teamB = document.querySelectorAll('.team-b-checkbox:checked');
+                function getAvailable() {{
+                    return allPlayers.filter(p => !selectedA.has(p.name) && !selectedB.has(p.name));
+                }}
 
-                    const teamAValues = new Set([...teamA].map(c => c.value));
-                    const teamBValues = new Set([...teamB].map(c => c.value));
+                function renderDropdown(container, filter) {{
+                    const dropdown = container.querySelector('.player-dropdown');
+                    const team = container.dataset.team;
+                    const selected = team === 'a' ? selectedA : selectedB;
 
-                    // Disable unchecked Team A boxes if at max
-                    document.querySelectorAll('.team-a-checkbox').forEach(c => {{
-                        if (!c.checked) {{
-                            c.disabled = teamA.length >= maxPerTeam || teamBValues.has(c.value);
-                        }}
-                    }});
+                    if (selected.size >= maxPerTeam) {{
+                        dropdown.innerHTML = '<li style="color: var(--pico-muted-color)">Max players reached</li>';
+                        return;
+                    }}
 
-                    // Disable unchecked Team B boxes if at max or in Team A
-                    document.querySelectorAll('.team-b-checkbox').forEach(c => {{
-                        if (!c.checked) {{
-                            c.disabled = teamB.length >= maxPerTeam || teamAValues.has(c.value);
-                        }}
+                    const available = getAvailable();
+                    const filtered = filter
+                        ? available.filter(p => p.name.toLowerCase().includes(filter.toLowerCase()))
+                        : available;
+
+                    if (filtered.length === 0) {{
+                        dropdown.innerHTML = '<li style="color: var(--pico-muted-color)">No players found</li>';
+                        return;
+                    }}
+
+                    dropdown.innerHTML = filtered.map(p =>
+                        `<li data-name="${{p.name}}">${{p.name}}</li>`
+                    ).join('');
+
+                    dropdown.querySelectorAll('li[data-name]').forEach(li => {{
+                        li.addEventListener('click', () => {{
+                            selectPlayer(container, li.dataset.name);
+                        }});
                     }});
                 }}
 
-                document.querySelectorAll('.team-a-checkbox, .team-b-checkbox').forEach(cb => {{
-                    cb.addEventListener('change', updateCheckboxes);
+                function selectPlayer(container, name) {{
+                    const team = container.dataset.team;
+                    const selected = team === 'a' ? selectedA : selectedB;
+                    const inputName = team === 'a' ? 'team_a' : 'team_b';
+
+                    if (selected.size >= maxPerTeam) return;
+
+                    selected.add(name);
+
+                    // Add chip
+                    const chipsContainer = container.querySelector('.selected-chips');
+                    const chip = document.createElement('span');
+                    chip.className = 'chip';
+                    chip.dataset.name = name;
+                    chip.innerHTML = `${{name}} <button type="button">&times;</button>`;
+                    chip.querySelector('button').addEventListener('click', () => {{
+                        removePlayer(container, name);
+                    }});
+                    chipsContainer.appendChild(chip);
+
+                    // Add hidden input for form
+                    const hidden = document.createElement('input');
+                    hidden.type = 'hidden';
+                    hidden.name = inputName;
+                    hidden.value = name;
+                    hidden.dataset.playerName = name;
+                    container.appendChild(hidden);
+
+                    // Clear search and close dropdown
+                    const search = container.querySelector('.player-search');
+                    search.value = '';
+                    container.querySelector('.player-dropdown').classList.remove('open');
+                }}
+
+                function removePlayer(container, name) {{
+                    const team = container.dataset.team;
+                    const selected = team === 'a' ? selectedA : selectedB;
+
+                    selected.delete(name);
+
+                    // Remove chip
+                    const chip = container.querySelector(`.chip[data-name="${{name}}"]`);
+                    if (chip) chip.remove();
+
+                    // Remove hidden input
+                    const hidden = container.querySelector(`input[data-player-name="${{name}}"]`);
+                    if (hidden) hidden.remove();
+                }}
+
+                // Setup event listeners
+                document.querySelectorAll('.player-select').forEach(container => {{
+                    const search = container.querySelector('.player-search');
+                    const dropdown = container.querySelector('.player-dropdown');
+
+                    search.addEventListener('focus', () => {{
+                        renderDropdown(container, search.value);
+                        dropdown.classList.add('open');
+                    }});
+
+                    search.addEventListener('input', () => {{
+                        renderDropdown(container, search.value);
+                        dropdown.classList.add('open');
+                    }});
                 }});
-            "#, MAX_PER_TEAM)))
+
+                // Close dropdown when clicking outside
+                document.addEventListener('click', (e) => {{
+                    document.querySelectorAll('.player-select').forEach(container => {{
+                        if (!container.contains(e.target)) {{
+                            container.querySelector('.player-dropdown').classList.remove('open');
+                        }}
+                    }});
+                }});
+            "#, players_json = players_json_str, max_per_team = MAX_PER_TEAM)))
         }
     };
 
