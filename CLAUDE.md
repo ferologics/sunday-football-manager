@@ -5,20 +5,22 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Commands
 
 ```bash
-just run      # Run locally with Shuttle (alias: just r)
+just run      # Run locally (alias: just r)
+just watch    # Run with auto-reload (alias: just w)
 just check    # cargo check + clippy (alias: just c)
-just deploy   # Deploy to Shuttle (alias: just d)
 just test     # Run tests
+just clean    # Clean build artifacts
 ```
 
 ## Architecture
 
-Rust web app using Axum + Shuttle.rs for hosting, with PostgreSQL database.
+Rust web app using Axum, hosted on Render.com with Neon PostgreSQL.
 
 **Tech Stack:**
-- Axum 0.7 - Web framework
-- Shuttle - Hosting and DB provisioning
-- sqlx - Database queries (compile-time checked)
+- Axum - Web framework
+- Render - Hosting (Docker)
+- Neon - Serverless PostgreSQL
+- sqlx - Database queries (with TLS via rustls)
 - Maud - Compile-time HTML templates
 - htmx - Client-side interactivity
 - PicoCSS - Styling
@@ -31,9 +33,13 @@ Rust web app using Axum + Shuttle.rs for hosting, with PostgreSQL database.
 - `src/elo.rs` - Elo calculations
 - `src/views/` - Maud HTML templates for each page
 
+**Environment:**
+- `.env` - Production config (DATABASE_URL)
+- `.env.local` - Local overrides (optional, loaded first)
+
 **Database:**
-- PostgreSQL via `shuttle-shared-db`
-- Migrations in `migrations/`
+- PostgreSQL via Neon (requires `?sslmode=require`)
+- Migrations in `migrations/` (run automatically on startup)
 - Two tables: `players` and `matches`
 
 **Team Balancing Algorithm:**

@@ -58,7 +58,7 @@ async fn main() {
 
     let port = std::env::var("PORT").unwrap_or_else(|_| "8000".to_string());
     let addr = format!("0.0.0.0:{}", port);
-    tracing::info!("Starting server on {}", addr);
+    tracing::info!("Starting server on http://localhost:{}", port);
 
     let listener = tokio::net::TcpListener::bind(&addr)
         .await

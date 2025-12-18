@@ -1,12 +1,12 @@
-# Sunday Football Manager
+# Football Manager
 
 A web app for organizing pickup football games. Balances teams fairly and tracks player skill over time.
 
 ## Tech Stack
 
 - **Backend**: Rust + Axum
-- **Hosting**: Shuttle.rs
-- **Database**: PostgreSQL
+- **Hosting**: Render.com
+- **Database**: Neon (serverless PostgreSQL)
 - **Templating**: Maud (compile-time HTML)
 - **Interactivity**: htmx
 - **Styling**: PicoCSS
@@ -64,29 +64,37 @@ elo_change = K × gd_multiplier × (actual - expected)
 ### Prerequisites
 
 - Rust (stable)
-- Cargo Shuttle CLI: `cargo install cargo-shuttle`
+- A PostgreSQL database (Neon free tier works)
+
+### Setup
+
+```bash
+# Install cargo-watch for auto-reload
+just setup
+
+# Copy env file and add your DATABASE_URL
+cp .env.example .env
+```
 
 ### Run Locally
 
 ```bash
-# Run with local Postgres
-cargo shuttle run
-```
-
-### Deploy
-
-```bash
-cargo shuttle deploy
+just run    # or: just r
 ```
 
 ### Commands
 
 ```bash
 just run     # Run locally
+just watch   # Run with auto-reload
 just check   # Check + clippy
-just deploy  # Deploy to Shuttle
 just test    # Run tests
+just clean   # Clean build artifacts
 ```
+
+## Deployment
+
+Deployed on Render with Docker. Set `DATABASE_URL` env var to your Neon connection string.
 
 ## Project Structure
 

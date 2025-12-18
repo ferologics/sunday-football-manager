@@ -6,34 +6,34 @@ alias w := watch
 build:
   cargo build
 
-clean:
-  cargo clean
-
 check:
   cargo check
   cargo clippy
 
-run:
-  cargo run
+clean:
+  cargo clean
 
-# Run with auto-reload on file changes (requires: cargo install cargo-watch)
-watch:
-  cargo watch -x run
+# Build Docker image locally
+docker-build:
+  docker build -t football-manager .
+
+# Run Docker container locally
+docker-run:
+  docker run -p 8000:8000 --env-file .env football-manager
 
 # Build release binary
 release:
   cargo build --release
 
-# Build Docker image locally
-docker-build:
-  docker build -t sunday-manager .
-
-# Run Docker container locally
-docker-run:
-  docker run -p 8000:8000 --env-file .env sunday-manager
+run:
+  cargo run
 
 setup:
   cargo install cargo-watch
 
 test:
   cargo test
+
+# Run with auto-reload on file changes (requires: cargo install cargo-watch)
+watch:
+  cargo watch -x run
