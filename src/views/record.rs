@@ -84,24 +84,22 @@ pub async fn page(State(state): State<Arc<AppState>>, jar: CookieJar) -> impl In
                     line-height: 1;
                 }
                 .chip button:hover { opacity: 0.7; }
-                .chip select {
-                    background: transparent;
-                    border: none;
-                    color: inherit;
-                    font-size: 0.75rem;
-                    padding: 0;
-                    margin: 0 0.25rem;
-                    cursor: pointer;
-                    -webkit-appearance: none;
-                    appearance: none;
+                .participation-row {
+                    display: flex;
+                    justify-content: space-between;
+                    align-items: center;
+                    padding: 0.5rem;
+                    border-bottom: 1px solid var(--pico-muted-border-color);
                 }
-                .chip select option {
-                    background: var(--pico-card-background-color);
-                    color: var(--pico-color);
+                .participation-row:last-child { border-bottom: none; }
+                .participation-row.partial {
+                    background: var(--pico-del-color);
+                    background: color-mix(in srgb, var(--pico-del-color) 15%, transparent);
                 }
-                .chip.injured {
-                    opacity: 0.7;
-                    background: var(--pico-secondary-background);
+                .participation-row select {
+                    width: auto;
+                    margin: 0;
+                    padding: 0.25rem 0.5rem;
                 }
             "#))
         }
@@ -135,6 +133,14 @@ pub async fn page(State(state): State<Arc<AppState>>, jar: CookieJar) -> impl In
                         ul class="player-dropdown" {}
                         div class="selected-chips" {}
                     }
+                }
+            }
+
+            // Participation section (collapsed by default)
+            details id="participation-section" {
+                summary { "Participation (expand if someone played partial)" }
+                div id="participation-list" {
+                    p class="secondary" { "Select players first" }
                 }
             }
 
@@ -206,6 +212,9 @@ pub async fn page(State(state): State<Arc<AppState>>, jar: CookieJar) -> impl In
                     }});
                 }}
 
+                // Track participation values (default 1.0)
+                const participationValues = {{}};
+
                 function selectPlayer(container, name, playerId) {{
                     const team = container.dataset.team;
                     const selected = team === 'a' ? selectedA : selectedB;
@@ -214,26 +223,15 @@ pub async fn page(State(state): State<Arc<AppState>>, jar: CookieJar) -> impl In
                     if (selected.size >= maxPerTeam) return;
 
                     selected.add(name);
+                    participationValues[playerId] = 1.0;
 
-                    // Add chip with participation dropdown
+                    // Add simple chip (just name and remove button)
                     const chipsContainer = container.querySelector('.selected-chips');
                     const chip = document.createElement('span');
                     chip.className = 'chip';
                     chip.dataset.name = name;
                     chip.dataset.playerId = playerId;
-                    chip.innerHTML = `${{name}} <select class="participation-select" title="Participation">
-                        <option value="1.0">100%</option>
-                        <option value="0.75">75%</option>
-                        <option value="0.5">50%</option>
-                        <option value="0.25">25%</option>
-                    </select><button type="button">&times;</button>`;
-
-                    // Handle participation change
-                    const select = chip.querySelector('select');
-                    select.addEventListener('change', () => {{
-                        updateParticipation(playerId, select.value);
-                        chip.classList.toggle('injured', select.value !== '1.0');
-                    }});
+                    chip.innerHTML = `${{name}}<button type="button">&times;</button>`;
 
                     chip.querySelector('button').addEventListener('click', () => {{
                         removePlayer(container, name, playerId);
@@ -248,24 +246,23 @@ pub async fn page(State(state): State<Arc<AppState>>, jar: CookieJar) -> impl In
                     hidden.dataset.playerName = name;
                     container.appendChild(hidden);
 
-                    // Add hidden input for participation (keyed by player ID)
-                    const partInput = document.createElement('input');
-                    partInput.type = 'hidden';
-                    partInput.name = 'participation';
-                    partInput.value = `${{playerId}}=1.0`;
-                    partInput.dataset.participationFor = playerId;
-                    container.appendChild(partInput);
-
                     // Clear search and close dropdown
                     const search = container.querySelector('.player-search');
                     search.value = '';
                     container.querySelector('.player-dropdown').classList.remove('open');
+
+                    // Update participation list
+                    renderParticipationList();
                 }}
 
                 function updateParticipation(playerId, value) {{
-                    const input = document.querySelector(`input[data-participation-for="${{playerId}}"]`);
-                    if (input) {{
-                        input.value = `${{playerId}}=${{value}}`;
+                    participationValues[playerId] = parseFloat(value);
+                    // Update row styling and hidden input
+                    const row = document.querySelector(`.participation-row[data-player-id="${{playerId}}"]`);
+                    if (row) {{
+                        row.classList.toggle('partial', value !== '1.0');
+                        const hidden = row.querySelector('input[name="participation"]');
+                        if (hidden) hidden.value = `${{playerId}}=${{value}}`;
                     }}
                 }}
 
@@ -274,16 +271,56 @@ pub async fn page(State(state): State<Arc<AppState>>, jar: CookieJar) -> impl In
                     const selected = team === 'a' ? selectedA : selectedB;
 
                     selected.delete(name);
+                    delete participationValues[playerId];
 
                     // Remove chip
                     const chip = container.querySelector(`.chip[data-name="${{name}}"]`);
                     if (chip) chip.remove();
 
-                    // Remove hidden inputs
+                    // Remove hidden input
                     const hidden = container.querySelector(`input[data-player-name="${{name}}"]`);
                     if (hidden) hidden.remove();
-                    const partInput = container.querySelector(`input[data-participation-for="${{playerId}}"]`);
-                    if (partInput) partInput.remove();
+
+                    // Update participation list
+                    renderParticipationList();
+                }}
+
+                function renderParticipationList() {{
+                    const list = document.getElementById('participation-list');
+                    const allSelected = [];
+
+                    // Gather all selected players
+                    document.querySelectorAll('.chip').forEach(chip => {{
+                        const playerId = parseInt(chip.dataset.playerId);
+                        const name = chip.dataset.name;
+                        const team = chip.closest('.player-select').dataset.team;
+                        allSelected.push({{ playerId, name, team }});
+                    }});
+
+                    if (allSelected.length === 0) {{
+                        list.innerHTML = '<p class="secondary">Select players first</p>';
+                        return;
+                    }}
+
+                    // Build participation list HTML
+                    let html = '';
+                    allSelected.forEach(({{ playerId, name, team }}) => {{
+                        const value = participationValues[playerId] || 1.0;
+                        const isPartial = value < 1.0;
+                        html += `
+                            <div class="participation-row${{isPartial ? ' partial' : ''}}" data-player-id="${{playerId}}">
+                                <span>${{name}} <small class="secondary">(Team ${{team.toUpperCase()}})</small></span>
+                                <select onchange="updateParticipation(${{playerId}}, this.value)">
+                                    <option value="1.0"${{value === 1.0 ? ' selected' : ''}}>100%</option>
+                                    <option value="0.75"${{value === 0.75 ? ' selected' : ''}}>75%</option>
+                                    <option value="0.5"${{value === 0.5 ? ' selected' : ''}}>50%</option>
+                                    <option value="0.25"${{value === 0.25 ? ' selected' : ''}}>25%</option>
+                                </select>
+                                <input type="hidden" name="participation" value="${{playerId}}=${{value}}">
+                            </div>
+                        `;
+                    }});
+                    list.innerHTML = html;
                 }}
 
                 // Setup event listeners

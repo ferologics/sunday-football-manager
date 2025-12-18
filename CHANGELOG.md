@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.3.2
+
+### Changed
+
+- **Record page UX**: Participation moved to collapsible section; player chips now show just name (no more awkward wrapping)
+
 ## 0.3.1
 
 ### Fixed
