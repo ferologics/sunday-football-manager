@@ -86,7 +86,16 @@ pub fn balance_teams(players: &[Player], randomize: bool) -> Option<TeamSplit> {
         let gk = &gks[0];
         let gk_on_team_a = rand::random::<bool>();
 
-        for combo in non_gks.iter().cloned().combinations(team_size - 1) {
+        // Combo size depends on which team gets the GK
+        // Team A needs (team_size - 1) non-GKs if GK is on team A
+        // Team A needs team_size non-GKs if GK is on team B
+        let combo_size = if gk_on_team_a {
+            team_size - 1
+        } else {
+            team_size
+        };
+
+        for combo in non_gks.iter().cloned().combinations(combo_size) {
             let (team_a, team_b) = if gk_on_team_a {
                 let mut a = vec![gk.clone()];
                 a.extend(combo.iter().cloned());
@@ -111,11 +120,6 @@ pub fn balance_teams(players: &[Player], randomize: bool) -> Option<TeamSplit> {
 
                 (a, b)
             };
-
-            // Ensure teams are balanced in size
-            if (team_a.len() as i32 - team_b.len() as i32).abs() > 1 {
-                continue;
-            }
 
             let split = calculate_split_cost(&team_a, &team_b);
 

@@ -94,14 +94,6 @@ impl Player {
     }
 }
 
-/// Helper to convert a slice of Tags to comma-separated string
-pub fn tags_to_string(tags: &[Tag]) -> String {
-    tags.iter()
-        .map(|t| t.to_string())
-        .collect::<Vec<_>>()
-        .join(",")
-}
-
 /// Form data for creating a new player
 #[derive(Debug, Deserialize)]
 pub struct NewPlayer {
