@@ -653,6 +653,8 @@ def page_record_result() -> None:
     # Team selection
     st.subheader("Select Teams")
 
+    max_per_team = MAX_PLAYERS // 2
+
     col1, col2 = st.columns(2)
     with col1:
         team_a_names = st.multiselect(
@@ -660,6 +662,7 @@ def page_record_result() -> None:
             options=player_names,
             default=default_a,
             key="record_team_a",
+            max_selections=max_per_team,
         )
     with col2:
         team_b_names = st.multiselect(
@@ -667,6 +670,7 @@ def page_record_result() -> None:
             options=player_names,
             default=default_b,
             key="record_team_b",
+            max_selections=max_per_team,
         )
 
     # Validation
