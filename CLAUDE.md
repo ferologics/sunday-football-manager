@@ -50,8 +50,10 @@ Rust web app using Axum, hosted on Render.com with Neon PostgreSQL.
 
 **Team Balancing Algorithm:**
 - Brute force all C(n, n/2) combinations
-- Cost = |avg_elo_A - avg_elo_B| + Σ(tag_penalty × weight)
-- Tag weights: PLAYMAKER(100) > RUNNER(80) > DEF(40) > ATK(20)
+- Cost = |avg_elo_A - avg_elo_B| + |tag_value_A - tag_value_B|
+- Player tag value = sum of their tag weights
+- Tag weights: PLAYMAKER(50) > RUNNER(40) > DEF(20) > ATK(10)
+- This naturally splits "star" multi-tag players between teams
 - GK handling: force split if 2 GKs, random if 1
 
 **Elo System:**

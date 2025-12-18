@@ -1,7 +1,6 @@
 use chrono::{DateTime, NaiveDate, Utc};
 use serde::{Deserialize, Serialize};
 use sqlx::FromRow;
-use std::collections::HashMap;
 use std::fmt;
 
 /// Player tags for team balancing
@@ -21,10 +20,10 @@ impl Tag {
     /// Weight for team balancing (GK has no weight - special handling)
     pub fn weight(self) -> i32 {
         match self {
-            Tag::Playmaker => 100,
-            Tag::Runner => 80,
-            Tag::Def => 40,
-            Tag::Atk => 20,
+            Tag::Playmaker => 50,
+            Tag::Runner => 40,
+            Tag::Def => 20,
+            Tag::Atk => 10,
             Tag::Gk => 0,
         }
     }
@@ -56,10 +55,10 @@ impl fmt::Display for Tag {
 
 /// Legacy constant for backwards compatibility with views
 pub const TAG_WEIGHTS: &[(&str, i32)] = &[
-    ("PLAYMAKER", 100),
-    ("RUNNER", 80),
-    ("DEF", 40),
-    ("ATK", 20),
+    ("PLAYMAKER", 50),
+    ("RUNNER", 40),
+    ("DEF", 20),
+    ("ATK", 10),
 ];
 
 pub const ELO_DEFAULT: f32 = 1200.0;
@@ -92,6 +91,15 @@ impl Player {
     /// Check if player has a specific tag
     pub fn has_tag(&self, tag: Tag) -> bool {
         self.tags().contains(&tag)
+    }
+
+    /// Sum of tag weights for this player (for team balancing)
+    pub fn tag_value(&self) -> i32 {
+        Tag::ALL
+            .iter()
+            .filter(|t| self.has_tag(**t))
+            .map(|t| t.weight())
+            .sum()
     }
 }
 
@@ -143,6 +151,7 @@ pub struct TeamSplit {
     pub team_b: Vec<Player>,
     pub cost: f32,
     pub elo_diff: f32,
-    pub tag_costs: HashMap<String, i32>,
+    pub tag_value_a: i32,
+    pub tag_value_b: i32,
 }
 

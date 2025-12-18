@@ -25,10 +25,10 @@ Each player can have tags describing their style:
 
 | Tag           | What it means                              | Weight |
 | ------------- | ------------------------------------------ | ------ |
-| **PLAYMAKER** | Good at passing, vision, controls the ball | 100    |
-| **RUNNER**    | High stamina, covers a lot of ground       | 80     |
-| **DEF**       | Solid defender                             | 40     |
-| **ATK**       | Finisher, good at scoring                  | 20     |
+| **PLAYMAKER** | Good at passing, vision, controls the ball | 50     |
+| **RUNNER**    | High stamina, covers a lot of ground       | 40     |
+| **DEF**       | Solid defender                             | 20     |
+| **ATK**       | Finisher, good at scoring                  | 10     |
 | **GK**        | Goalkeeper (special handling)              | -      |
 
 ### Team Balancing
@@ -37,10 +37,11 @@ The app tries every possible way to split players into two teams and picks the "
 
 **Cost function:**
 ```
-cost = |avg_elo_A - avg_elo_B| + sum(tag_penalties)
+player_tag_value = sum of their tag weights
+cost = |avg_elo_A - avg_elo_B| + |team_tag_value_A - team_tag_value_B|
 ```
 
-Where `tag_penalty = |count_A - count_B| × weight`
+This balances both Elo and overall team "power". Multi-tag players (e.g., PLAYMAKER+RUNNER+DEF = 110) are naturally split between teams.
 
 **GK handling:**
 - 2 GKs → force one to each team

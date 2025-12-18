@@ -1,7 +1,7 @@
 use crate::auth::is_authenticated;
 use crate::balance::balance_teams;
 use crate::elo::average_elo;
-use crate::models::{TeamSplit, TAG_WEIGHTS};
+use crate::models::TeamSplit;
 use crate::views::layout::{base, render_tags, AuthState};
 use crate::{db, AppState};
 use axum::{
@@ -218,20 +218,13 @@ fn render_teams(split: &TeamSplit) -> Markup {
         // Balance details
         details {
             summary { "Balance Details" }
-            p { "Total Cost: " (format!("{:.1}", split.cost)) }
-            p { "Elo Difference: " (format!("{:.1}", split.elo_diff)) }
-            @if !split.tag_costs.is_empty() {
-                p { "Tag Imbalances:" }
-                ul class="cost-breakdown" {
-                    @for (tag, weight) in TAG_WEIGHTS {
-                        @if let Some(&diff) = split.tag_costs.get(*tag) {
-                            @if diff > 0 {
-                                li { (tag) ": " (diff) " (penalty: " (diff * weight) ")" }
-                            }
-                        }
-                    }
-                }
+            p { "Elo Diff: " (format!("{:.1}", split.elo_diff)) }
+            p {
+                "Tag Value: "
+                (split.tag_value_a) " vs " (split.tag_value_b)
+                " (diff: " ((split.tag_value_a - split.tag_value_b).abs()) ")"
             }
+            p class="secondary" { "Total Cost: " (format!("{:.1}", split.cost)) }
         }
     }
 }

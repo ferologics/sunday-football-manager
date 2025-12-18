@@ -3,12 +3,6 @@ use crate::models::{Player, Tag, TeamSplit};
 use itertools::Itertools;
 use rand::seq::SliceRandom;
 use rand::thread_rng;
-use std::collections::HashMap;
-
-/// Count how many players have a specific tag
-fn count_tags(players: &[Player], tag: Tag) -> i32 {
-    players.iter().filter(|p| p.has_tag(tag)).count() as i32
-}
 
 /// Calculate the cost of a team split
 fn calculate_split_cost(team_a: &[Player], team_b: &[Player]) -> TeamSplit {
@@ -16,23 +10,18 @@ fn calculate_split_cost(team_a: &[Player], team_b: &[Player]) -> TeamSplit {
     let elo_b = average_elo(team_b);
     let elo_diff = (elo_a - elo_b).abs();
 
-    let mut tag_costs = HashMap::new();
-    let mut total_tag_cost = 0.0;
-
-    for tag in Tag::ALL {
-        let count_a = count_tags(team_a, *tag);
-        let count_b = count_tags(team_b, *tag);
-        let diff = (count_a - count_b).abs();
-        tag_costs.insert(tag.to_string(), diff);
-        total_tag_cost += diff as f32 * tag.weight() as f32;
-    }
+    // Balance team "tag value" (sum of player tag values) instead of per-tag counts
+    let tag_value_a: i32 = team_a.iter().map(|p| p.tag_value()).sum();
+    let tag_value_b: i32 = team_b.iter().map(|p| p.tag_value()).sum();
+    let tag_diff = (tag_value_a - tag_value_b).abs() as f32;
 
     TeamSplit {
         team_a: team_a.to_vec(),
         team_b: team_b.to_vec(),
-        cost: elo_diff + total_tag_cost,
+        cost: elo_diff + tag_diff,
         elo_diff,
-        tag_costs,
+        tag_value_a,
+        tag_value_b,
     }
 }
 
@@ -311,5 +300,24 @@ mod tests {
 
         // Teams should have similar total Elo (within 200)
         assert!((elo_a - elo_b).abs() <= 200.0);
+    }
+
+    #[test]
+    fn test_star_players_split_between_teams() {
+        // Two "stars" with high tag value should end up on different teams
+        let players = vec![
+            make_player(1, "Star1", 1200.0, "PLAYMAKER,RUNNER,DEF"), // 50+40+20 = 110
+            make_player(2, "Star2", 1200.0, "PLAYMAKER,RUNNER,DEF"), // 50+40+20 = 110
+            make_player(3, "Role1", 1200.0, "DEF"),                   // 20
+            make_player(4, "Role2", 1200.0, "DEF"),                   // 20
+        ];
+
+        let split = balance_teams(&players, false).unwrap();
+
+        // Stars should be split between teams (Star1+Role2 vs Star2+Role1 or vice versa)
+        // Total tag values: 110+20=130 per team vs putting stars together: 220 vs 40
+        let star1_in_a = split.team_a.iter().any(|p| p.id == 1);
+        let star2_in_a = split.team_a.iter().any(|p| p.id == 2);
+        assert_ne!(star1_in_a, star2_in_a, "Stars should be on different teams");
     }
 }

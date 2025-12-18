@@ -99,6 +99,17 @@ pub fn base(title: &str, current_page: &str, auth: &AuthState, content: Markup) 
 
                     // Page content
                     (content)
+
+                    // Footer
+                    footer style="margin-top: 2rem; padding-top: 1rem; border-top: 1px solid var(--pico-muted-border-color); text-align: center;" {
+                        small class="secondary" {
+                            "Sunday Football Manager v" (env!("CARGO_PKG_VERSION"))
+                            " · "
+                            a href="https://github.com/ferologics/sunday-football-manager/blob/master/CHANGELOG.md" target="_blank" {
+                                "Changelog"
+                            }
+                        }
+                    }
                 }
             }
         }
