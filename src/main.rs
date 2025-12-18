@@ -10,6 +10,7 @@ use axum::{
 };
 use sqlx::PgPool;
 use std::sync::Arc;
+use tower_http::trace::TraceLayer;
 
 /// Shared application state
 #[derive(Clone)]
@@ -21,7 +22,13 @@ pub struct AppState {
 async fn main() {
     dotenvy::from_filename(".env.local").ok();
     dotenvy::dotenv().ok();
-    tracing_subscriber::fmt::init();
+
+    tracing_subscriber::fmt()
+        .with_env_filter(
+            tracing_subscriber::EnvFilter::from_default_env()
+                .add_directive(tracing::Level::DEBUG.into()),
+        )
+        .init();
 
     let database_url = std::env::var("DATABASE_URL")
         .expect("DATABASE_URL must be set");
@@ -48,12 +55,12 @@ async fn main() {
         .route("/api/players", post(views::roster::create_player))
         .route("/api/players/{id}", put(views::roster::update_player))
         .route("/api/players/{id}", delete(views::roster::delete_player))
-        .route("/api/seed", post(views::roster::seed_roster))
         // API - Match Day
         .route("/api/generate", post(views::match_day::generate_teams))
         .route("/api/shuffle", post(views::match_day::shuffle_teams))
         // API - Record
         .route("/api/record", post(views::record::submit_result))
+        .layer(TraceLayer::new_for_http())
         .with_state(state);
 
     let port = std::env::var("PORT").unwrap_or_else(|_| "8000".to_string());

@@ -104,52 +104,6 @@ pub async fn get_all_matches(pool: &PgPool) -> Result<Vec<Match>, sqlx::Error> {
     .await
 }
 
-/// Seed database with default players
-pub async fn seed_players(pool: &PgPool) -> Result<usize, sqlx::Error> {
-    use crate::models::{tags_to_string, Tag};
-    use Tag::*;
-
-    let players: Vec<(&str, f32, &[Tag])> = vec![
-        ("Fero", 1300.0, &[Atk, Runner, Playmaker]),
-        ("Adrian Kurtyka", 1300.0, &[Atk, Runner]),
-        ("Mikele", 1300.0, &[Def, Atk, Runner, Playmaker]),
-        ("Michał Sobczyk", 1300.0, &[Def, Atk, Playmaker]),
-        ("Konrad Sobczyk", 1200.0, &[Def]),
-        ("Kamil Bozek", 1200.0, &[Def, Runner]),
-        ("Patryk Godula", 1300.0, &[Def, Runner, Playmaker]),
-        ("Wojtek Baltazar", 1300.0, &[Def, Runner]),
-        ("Adrian Pallasch", 1250.0, &[Def, Atk]),
-        ("Jakub Gwarda", 1200.0, &[Atk, Playmaker]),
-        ("Łukasz Rajza", 1300.0, &[Atk, Runner, Playmaker]),
-        ("Adam Huchla", 1200.0, &[Def]),
-        ("Marcin Chojnacki", 1300.0, &[Atk, Runner, Playmaker]),
-        ("Bartosz Adamik", 1200.0, &[Gk]),
-        ("Dawid Pieprzyca", 1200.0, &[Def, Runner]),
-        ("Filip", 1250.0, &[Def, Runner]),
-        ("Marcin Cebulak", 1200.0, &[Def, Atk, Playmaker]),
-        ("Patryk Pasternak", 1200.0, &[Def, Atk, Runner]),
-        ("Sebastian Cebula", 1200.0, &[Def, Runner]),
-        ("Dawid Zachar (Orlikfy)", 1250.0, &[Def, Runner, Playmaker]),
-        ("Jakub Wójcik (Orlikfy)", 1200.0, &[Atk, Runner]),
-        ("Łukasz Środek (Orlikfy)", 1200.0, &[]),
-    ];
-
-    let mut count = 0;
-    for (name, elo, tags) in players {
-        let tags_str = tags_to_string(tags);
-        let result = sqlx::query(
-            "INSERT INTO players (name, elo, tags) VALUES ($1, $2, $3) ON CONFLICT (name) DO NOTHING"
-        )
-        .bind(name)
-        .bind(elo)
-        .bind(tags_str)
-        .execute(pool)
-        .await?;
-        count += result.rows_affected() as usize;
-    }
-    Ok(count)
-}
-
 /// Create a new match record
 pub async fn create_match(
     pool: &PgPool,

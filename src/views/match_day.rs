@@ -6,8 +6,8 @@ use crate::{db, AppState};
 use axum::{
     extract::State,
     response::{Html, IntoResponse},
-    Form,
 };
+use axum_extra::extract::Form;
 use maud::{html, Markup};
 use std::sync::Arc;
 
@@ -32,34 +32,32 @@ pub async fn page(State(state): State<Arc<AppState>>) -> impl IntoResponse {
                                 type="checkbox"
                                 name="player_ids"
                                 value=(player.id)
-                                class="player-checkbox"
-                                data-elo=(player.elo);
-                            (player.name) " (" (format!("{:.0}", player.elo)) ")"
-                            (render_tags(&player.tags))
+                                class="player-checkbox";
+                            (player.name)
                         }
                     }
                 }
-            }
-        }
 
-        hr;
+                hr;
 
-        // Team generation buttons
-        div class="grid" {
-            button
-                hx-post="/api/generate"
-                hx-include="#checkin-form"
-                hx-target="#teams-display"
-            {
-                "Generate Teams"
-            }
-            button
-                class="secondary"
-                hx-post="/api/shuffle"
-                hx-include="#checkin-form"
-                hx-target="#teams-display"
-            {
-                "Shuffle (Re-roll)"
+                // Team generation buttons
+                div class="grid" {
+                    button
+                        type="submit"
+                        hx-post="/api/generate"
+                        hx-target="#teams-display"
+                    {
+                        "Generate Teams"
+                    }
+                    button
+                        type="submit"
+                        class="secondary"
+                        hx-post="/api/shuffle"
+                        hx-target="#teams-display"
+                    {
+                        "Shuffle (Re-roll)"
+                    }
+                }
             }
         }
 
@@ -68,18 +66,32 @@ pub async fn page(State(state): State<Arc<AppState>>) -> impl IntoResponse {
             p class="secondary" { "Select players and click 'Generate Teams'" }
         }
 
-        // Script to enforce max players
+        // Script to enforce max players and enable/disable buttons
         script {
             (maud::PreEscaped(format!(r#"
+                const maxPlayers = {};
+                const buttons = document.querySelectorAll('#checkin-form button[type="submit"]');
+
+                function updateState() {{
+                    const checked = document.querySelectorAll('.player-checkbox:checked').length;
+
+                    // Disable unchecked boxes when at max
+                    if (checked >= maxPlayers) {{
+                        document.querySelectorAll('.player-checkbox:not(:checked)').forEach(c => c.disabled = true);
+                    }} else {{
+                        document.querySelectorAll('.player-checkbox').forEach(c => c.disabled = false);
+                    }}
+
+                    // Only enable buttons when exactly max players selected
+                    buttons.forEach(btn => btn.disabled = checked !== maxPlayers);
+                }}
+
+                // Initial state
+                updateState();
+
+                // Listen for changes
                 document.querySelectorAll('.player-checkbox').forEach(cb => {{
-                    cb.addEventListener('change', () => {{
-                        const checked = document.querySelectorAll('.player-checkbox:checked').length;
-                        if (checked >= {}) {{
-                            document.querySelectorAll('.player-checkbox:not(:checked)').forEach(c => c.disabled = true);
-                        }} else {{
-                            document.querySelectorAll('.player-checkbox').forEach(c => c.disabled = false);
-                        }}
-                    }});
+                    cb.addEventListener('change', updateState);
                 }});
             "#, MAX_PLAYERS)))
         }
@@ -93,7 +105,15 @@ pub async fn generate_teams(
     State(state): State<Arc<AppState>>,
     Form(form): Form<GenerateForm>,
 ) -> impl IntoResponse {
-    let player_ids = form.player_ids.unwrap_or_default();
+    tracing::info!("Generate teams called with: {:?}", form.player_ids);
+
+    let player_ids: Vec<i32> = form
+        .player_ids
+        .iter()
+        .filter_map(|s| s.parse().ok())
+        .collect();
+
+    tracing::info!("Parsed player_ids: {:?}", player_ids);
 
     if player_ids.len() < 2 {
         return Html(html! {
@@ -124,7 +144,11 @@ pub async fn shuffle_teams(
     State(state): State<Arc<AppState>>,
     Form(form): Form<GenerateForm>,
 ) -> impl IntoResponse {
-    let player_ids = form.player_ids.unwrap_or_default();
+    let player_ids: Vec<i32> = form
+        .player_ids
+        .iter()
+        .filter_map(|s| s.parse().ok())
+        .collect();
 
     if player_ids.len() < 2 {
         return Html(html! {
@@ -151,9 +175,10 @@ pub async fn shuffle_teams(
 }
 
 /// Form data for team generation
-#[derive(serde::Deserialize)]
+#[derive(Debug, serde::Deserialize)]
 pub struct GenerateForm {
-    player_ids: Option<Vec<i32>>,
+    #[serde(default)]
+    player_ids: Vec<String>,
 }
 
 /// Render the generated teams

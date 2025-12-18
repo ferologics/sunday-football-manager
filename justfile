@@ -36,4 +36,4 @@ test:
 
 # Run with auto-reload on file changes (requires: cargo install cargo-watch)
 watch:
-  cargo watch -x run
+  cargo watch -- cargo run
