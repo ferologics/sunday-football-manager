@@ -5,6 +5,7 @@ A lightweight Streamlit app for managing 7v7 Sunday League games.
 
 from __future__ import annotations
 
+import json
 import random
 from dataclasses import dataclass, field
 from datetime import date
@@ -33,6 +34,7 @@ TAG_WEIGHTS: dict[str, int] = {
 ELO_K_FACTOR = 32  # Standard Elo K-factor
 ELO_DEFAULT = 1200.0  # Starting Elo for new players
 GD_MULTIPLIER_CAP = 2.5  # Max goal difference multiplier (at 5+ goals)
+MAX_PLAYERS = 14  # Maximum players for 7v7
 
 
 # =============================================================================
@@ -70,17 +72,30 @@ class Match:
     team_b: list[str]
     score_a: int
     score_b: int
+    elo_snapshot_a: dict[str, dict[str, float]] = field(default_factory=dict)
+    elo_snapshot_b: dict[str, dict[str, float]] = field(default_factory=dict)
 
     @classmethod
     def from_sheet_row(cls, row: dict[str, Any]) -> Match:
         team_a_str = str(row.get("Team_A", ""))
         team_b_str = str(row.get("Team_B", ""))
+        # Parse JSON snapshots, default to empty dict if missing/invalid
+        try:
+            snapshot_a = json.loads(str(row.get("Elo_Snapshot_A", "{}"))) or {}
+        except json.JSONDecodeError:
+            snapshot_a = {}
+        try:
+            snapshot_b = json.loads(str(row.get("Elo_Snapshot_B", "{}"))) or {}
+        except json.JSONDecodeError:
+            snapshot_b = {}
         return cls(
             match_date=str(row.get("Date", "")),
             team_a=[n.strip() for n in team_a_str.split(",") if n.strip()],
             team_b=[n.strip() for n in team_b_str.split(",") if n.strip()],
             score_a=int(row.get("Score_A", 0)),
             score_b=int(row.get("Score_B", 0)),
+            elo_snapshot_a=snapshot_a,
+            elo_snapshot_b=snapshot_b,
         )
 
 
@@ -142,40 +157,63 @@ def load_matches() -> list[Match]:
 
 
 def save_player(player: Player) -> None:
-    """Add a new player to the sheet."""
+    """Add a new player to the sheet and cache."""
     ws = get_players_worksheet()
     ws.append_row([player.name, player.elo, ",".join(player.tags), player.matches_played])
+    # Update cache
+    if st.session_state.get("players_cache") is not None:
+        st.session_state.players_cache.append(player)
 
 
 def update_player_elo(name: str, new_elo: float, new_matches: int) -> None:
-    """Update a player's Elo and match count in the sheet."""
+    """Update a player's Elo and match count in the sheet and cache."""
     ws = get_players_worksheet()
     cell = ws.find(name, in_column=1)
     if cell:
         ws.update_cell(cell.row, 2, round(new_elo, 1))
         ws.update_cell(cell.row, 4, new_matches)
+    # Update cache
+    if st.session_state.get("players_cache") is not None:
+        for p in st.session_state.players_cache:
+            if p.name == name:
+                p.elo = new_elo
+                p.matches_played = new_matches
+                break
 
 
 def update_player_full(name: str, new_elo: float, new_tags: str, new_matches: int) -> None:
-    """Update all player fields."""
+    """Update all player fields in sheet and cache."""
     ws = get_players_worksheet()
     cell = ws.find(name, in_column=1)
     if cell:
         ws.update_cell(cell.row, 2, round(new_elo, 1))
         ws.update_cell(cell.row, 3, new_tags)
         ws.update_cell(cell.row, 4, new_matches)
+    # Update cache
+    if st.session_state.get("players_cache") is not None:
+        for p in st.session_state.players_cache:
+            if p.name == name:
+                p.elo = new_elo
+                p.tags = [t.strip().upper() for t in new_tags.split(",") if t.strip()]
+                p.matches_played = new_matches
+                break
 
 
 def delete_player(name: str) -> None:
-    """Delete a player from the sheet."""
+    """Delete a player from the sheet and cache."""
     ws = get_players_worksheet()
     cell = ws.find(name, in_column=1)
     if cell:
         ws.delete_rows(cell.row)
+    # Update cache
+    if st.session_state.get("players_cache") is not None:
+        st.session_state.players_cache = [
+            p for p in st.session_state.players_cache if p.name != name
+        ]
 
 
 def save_match(match: Match) -> None:
-    """Save a match result to the sheet."""
+    """Save a match result to the sheet and cache."""
     ws = get_matches_worksheet()
     ws.append_row(
         [
@@ -184,8 +222,13 @@ def save_match(match: Match) -> None:
             ",".join(match.team_b),
             match.score_a,
             match.score_b,
+            json.dumps(match.elo_snapshot_a),
+            json.dumps(match.elo_snapshot_b),
         ]
     )
+    # Update cache
+    if st.session_state.get("matches_cache") is not None:
+        st.session_state.matches_cache.append(match)
 
 
 # =============================================================================
@@ -377,6 +420,31 @@ def init_session_state() -> None:
         st.session_state.current_split = None
     if "match_recorded" not in st.session_state:
         st.session_state.match_recorded = False
+    # Data cache to avoid API rate limits
+    if "players_cache" not in st.session_state:
+        st.session_state.players_cache = None
+    if "matches_cache" not in st.session_state:
+        st.session_state.matches_cache = None
+
+
+def get_players() -> list[Player]:
+    """Get players from cache, loading from sheet if needed."""
+    if st.session_state.players_cache is None:
+        st.session_state.players_cache = load_players()
+    return st.session_state.players_cache
+
+
+def get_matches() -> list[Match]:
+    """Get matches from cache, loading from sheet if needed."""
+    if st.session_state.matches_cache is None:
+        st.session_state.matches_cache = load_matches()
+    return st.session_state.matches_cache
+
+
+def refresh_data() -> None:
+    """Force reload data from Google Sheets."""
+    st.session_state.players_cache = load_players()
+    st.session_state.matches_cache = load_matches()
 
 
 def page_match_day() -> None:
@@ -384,7 +452,7 @@ def page_match_day() -> None:
     st.header("Match Day")
 
     try:
-        players = load_players()
+        players = get_players()
     except Exception as e:
         st.error(f"Failed to load players: {e}")
         st.info("Make sure your Google Sheet is set up correctly with a 'Players' tab.")
@@ -400,23 +468,35 @@ def page_match_day() -> None:
     # Sort players by name
     players.sort(key=lambda p: p.name.lower())
 
+    # Calculate current selection count
+    num_checked = len(st.session_state.checked_players)
+    num_guests = len(st.session_state.guests)
+    total_selected = num_checked + num_guests
+    at_capacity = total_selected >= MAX_PLAYERS
+
+    if at_capacity:
+        st.warning(f"Maximum {MAX_PLAYERS} players reached. Remove someone to add more.")
+
     # Create checkbox grid
     cols = st.columns(3)
     for i, player in enumerate(players):
         with cols[i % 3]:
+            is_checked = player.name in st.session_state.checked_players
+            # Disable unchecked boxes when at capacity
+            disabled = at_capacity and not is_checked
             checked = st.checkbox(
                 f"{player.name} ({player.elo:.0f})",
                 key=f"check_{player.name}",
-                value=player.name in st.session_state.checked_players,
+                value=is_checked,
+                disabled=disabled,
             )
-            if checked:
+            if checked and not is_checked:
                 st.session_state.checked_players.add(player.name)
-            elif player.name in st.session_state.checked_players:
+            elif not checked and is_checked:
                 st.session_state.checked_players.discard(player.name)
 
     # Guest players section
-    st.subheader("Add Guest Player")
-    with st.form("guest_form", clear_on_submit=True):
+    with st.expander("Add Guest Player"), st.form("guest_form", clear_on_submit=True):
         col1, col2 = st.columns([2, 1])
         with col1:
             guest_name = st.text_input("Guest Name")
@@ -429,15 +509,18 @@ def page_match_day() -> None:
         )
 
         if st.form_submit_button("Add Guest") and guest_name:
-            guest = Player(
-                name=f"[G] {guest_name}",
-                elo=float(guest_skill),
-                tags=guest_tags,
-                is_guest=True,
-            )
-            st.session_state.guests.append(guest)
-            st.success(f"Added guest: {guest.name}")
-            st.rerun()
+            if at_capacity:
+                st.error(f"Cannot add guest: maximum {MAX_PLAYERS} players reached.")
+            else:
+                guest = Player(
+                    name=f"[G] {guest_name}",
+                    elo=float(guest_skill),
+                    tags=guest_tags,
+                    is_guest=True,
+                )
+                st.session_state.guests.append(guest)
+                st.success(f"Added guest: {guest.name}")
+                st.rerun()
 
     # Show current guests
     if st.session_state.guests:
@@ -458,7 +541,7 @@ def page_match_day() -> None:
     checked_players = [p for p in players if p.name in checked_names]
     all_players = checked_players + st.session_state.guests
 
-    st.write(f"**Players selected: {len(all_players)}**")
+    st.write(f"**Players selected: {len(all_players)}/{MAX_PLAYERS}**")
 
     if len(all_players) >= 2:
         col1, col2 = st.columns(2)
@@ -520,7 +603,7 @@ def page_record_result() -> None:
 
     # Load players
     try:
-        players = load_players()
+        players = get_players()
     except Exception as e:
         st.error(f"Failed to load players: {e}")
         return
@@ -646,6 +729,17 @@ def page_record_result() -> None:
 
         # Save to database
         try:
+            # Build Elo snapshots before updating
+            snapshot_a: dict[str, dict[str, float]] = {}
+            snapshot_b: dict[str, dict[str, float]] = {}
+            for p in team_a:
+                if p.name in changes:
+                    snapshot_a[p.name] = {"before": p.elo, "delta": changes[p.name]}
+            for p in team_b:
+                if p.name in changes:
+                    snapshot_b[p.name] = {"before": p.elo, "delta": changes[p.name]}
+
+            # Update player Elos
             for name, delta in changes.items():
                 if name in player_map:
                     p = player_map[name]
@@ -653,13 +747,15 @@ def page_record_result() -> None:
                     new_matches = p.matches_played + 1
                     update_player_elo(name, new_elo, new_matches)
 
-            # Save match record
+            # Save match record with snapshots
             match = Match(
                 match_date=date.today().isoformat(),
                 team_a=[p.name for p in team_a],
                 team_b=[p.name for p in team_b],
                 score_a=score_a,
                 score_b=score_b,
+                elo_snapshot_a=snapshot_a,
+                elo_snapshot_b=snapshot_b,
             )
             save_match(match)
 
@@ -676,7 +772,7 @@ def page_roster() -> None:
     st.header("Roster Management")
 
     try:
-        players = load_players()
+        players = get_players()
     except Exception as e:
         st.error(f"Failed to load players: {e}")
         return
@@ -781,7 +877,7 @@ def page_history() -> None:
     st.header("Match History")
 
     try:
-        matches = load_matches()
+        matches = get_matches()
     except Exception as e:
         st.error(f"Failed to load matches: {e}")
         return
@@ -790,10 +886,56 @@ def page_history() -> None:
         st.info("No matches recorded yet.")
         return
 
-    # Reverse to show most recent first
-    matches.reverse()
-
+    # Build Elo history from snapshots for chart
+    elo_history: list[dict[str, Any]] = []
     for match in matches:
+        match_date = match.match_date
+        # Process team A snapshots
+        for name, snapshot in match.elo_snapshot_a.items():
+            if isinstance(snapshot, dict) and "before" in snapshot and "delta" in snapshot:
+                elo_history.append({
+                    "date": match_date,
+                    "player": name,
+                    "elo": snapshot["before"] + snapshot["delta"],
+                })
+        # Process team B snapshots
+        for name, snapshot in match.elo_snapshot_b.items():
+            if isinstance(snapshot, dict) and "before" in snapshot and "delta" in snapshot:
+                elo_history.append({
+                    "date": match_date,
+                    "player": name,
+                    "elo": snapshot["before"] + snapshot["delta"],
+                })
+
+    # Show Elo progression chart if we have data
+    if elo_history:
+        st.subheader("Elo Progression")
+        df = pd.DataFrame(elo_history)
+
+        # Player filter
+        all_players = sorted(df["player"].unique())
+        selected_players = st.multiselect(
+            "Filter players",
+            options=all_players,
+            default=all_players,
+            key="history_player_filter",
+        )
+
+        if selected_players:
+            filtered_df = df[df["player"].isin(selected_players)]
+            # Pivot for line chart: dates as index, players as columns
+            pivot_df = filtered_df.pivot_table(
+                index="date", columns="player", values="elo", aggfunc="last"
+            )
+            st.line_chart(pivot_df)
+
+    st.divider()
+    st.subheader("Match Log")
+
+    # Reverse to show most recent first
+    matches_display = list(reversed(matches))
+
+    for match in matches_display:
         result_emoji = ""
         if match.score_a > match.score_b:
             result_emoji = "Team A wins"
@@ -809,11 +951,23 @@ def page_history() -> None:
             with col1:
                 st.write("**Team A:**")
                 for name in match.team_a:
-                    st.write(f"- {name}")
+                    snapshot = match.elo_snapshot_a.get(name, {})
+                    if isinstance(snapshot, dict) and "before" in snapshot and "delta" in snapshot:
+                        delta = snapshot["delta"]
+                        sign = "+" if delta >= 0 else ""
+                        st.write(f"- {name} ({snapshot['before']:.0f} {sign}{delta:.0f})")
+                    else:
+                        st.write(f"- {name}")
             with col2:
                 st.write("**Team B:**")
                 for name in match.team_b:
-                    st.write(f"- {name}")
+                    snapshot = match.elo_snapshot_b.get(name, {})
+                    if isinstance(snapshot, dict) and "before" in snapshot and "delta" in snapshot:
+                        delta = snapshot["delta"]
+                        sign = "+" if delta >= 0 else ""
+                        st.write(f"- {name} ({snapshot['before']:.0f} {sign}{delta:.0f})")
+                    else:
+                        st.write(f"- {name}")
 
 
 def main() -> None:
@@ -833,6 +987,13 @@ def main() -> None:
         "Navigation",
         options=["Match Day", "Record Result", "Roster", "History"],
     )
+
+    # Refresh button
+    st.sidebar.divider()
+    if st.sidebar.button("Refresh Data"):
+        with st.spinner("Refreshing..."):
+            refresh_data()
+        st.sidebar.success("Data refreshed!")
 
     # Check for required secrets
     if "gcp_service_account" not in st.secrets or "sheet_url" not in st.secrets:
