@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.3.5
+
+### Changed
+
+- **Code cleanup**: Replaced 12 inline styles with 8 reusable CSS classes
+
 ## 0.3.4
 
 ### Fixed

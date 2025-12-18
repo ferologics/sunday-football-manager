@@ -48,7 +48,7 @@ pub async fn page(State(state): State<Arc<AppState>>, jar: CookieJar) -> impl In
                     span id="add-spinner" class="htmx-indicator spinner" {}
                 }
                 @if !logged_in {
-                    p class="secondary" style="margin-top: 0.5rem; font-size: 0.875rem;" { "Login to add players" }
+                    p class="secondary login-hint" { "Login to add players" }
                 }
             }
         }

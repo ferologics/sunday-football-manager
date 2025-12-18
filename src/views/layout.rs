@@ -71,6 +71,14 @@ pub fn base(title: &str, current_page: &str, auth: &AuthState, content: Markup) 
                         margin-left: 0.5rem;
                     }
                     @keyframes spin { to { transform: rotate(360deg); } }
+                    .page-title { margin: 0; }
+                    .login-hint { margin-top: 0.5rem; font-size: 0.875rem; }
+                    .logged-in-text { color: var(--pico-ins-color); }
+                    .site-footer { margin-top: 2rem; padding-top: 1rem; border-top: 1px solid var(--pico-muted-border-color); text-align: center; }
+                    .chart-container { position: relative; height: 400px; margin-bottom: 2rem; }
+                    .participation-pct { font-size: 0.8em; }
+                    .score-grid { align-items: center; }
+                    .score-separator { text-align: center; font-size: 2rem; }
                     "#
                 }
             }
@@ -78,12 +86,12 @@ pub fn base(title: &str, current_page: &str, auth: &AuthState, content: Markup) 
                 main class="container" {
                     // Header with title and auth
                     div class="header-row" {
-                        h1 style="margin: 0;" { "Sunday Football Manager" }
+                        h1 class="page-title" { "Sunday Football Manager" }
 
                         @if auth.enabled {
                             @if auth.logged_in {
                                 div class="auth-status" {
-                                    span style="color: var(--pico-ins-color);" { "Logged in" }
+                                    span class="logged-in-text" { "Logged in" }
                                     form action="/api/logout" method="post" class="auth-form" {
                                         button type="submit" class="secondary outline" { "Logout" }
                                     }
@@ -119,7 +127,7 @@ pub fn base(title: &str, current_page: &str, auth: &AuthState, content: Markup) 
                     (content)
 
                     // Footer
-                    footer style="margin-top: 2rem; padding-top: 1rem; border-top: 1px solid var(--pico-muted-border-color); text-align: center;" {
+                    footer class="site-footer" {
                         small class="secondary" {
                             "Sunday Football Manager v" (env!("CARGO_PKG_VERSION"))
                             " · "

@@ -148,12 +148,12 @@ pub async fn page(State(state): State<Arc<AppState>>, jar: CookieJar) -> impl In
 
             // Score input
             h3 { "Score" }
-            div class="grid" style="align-items: center;" {
+            div class="grid score-grid" {
                 div {
                     label { "Team A" }
                     input type="number" name="score_a" value="0" min="0" max="50" required;
                 }
-                div style="text-align: center; font-size: 2rem;" { "-" }
+                div class="score-separator" { "-" }
                 div {
                     label { "Team B" }
                     input type="number" name="score_b" value="0" min="0" max="50" required;
@@ -165,7 +165,7 @@ pub async fn page(State(state): State<Arc<AppState>>, jar: CookieJar) -> impl In
                 span id="submit-spinner" class="htmx-indicator spinner" {}
             }
             @if !logged_in {
-                p class="secondary" style="margin-top: 0.5rem; font-size: 0.875rem;" { "Login to record results" }
+                p class="secondary login-hint" { "Login to record results" }
             }
         }
 
@@ -565,7 +565,7 @@ fn render_result(
                                     (player.name) ": "
                                     (render_elo_delta(effective_delta))
                                     @if change.participation < 1.0 {
-                                        span class="secondary" style="font-size: 0.8em;" {
+                                        span class="secondary participation-pct" {
                                             " (" (format!("{:.0}%", change.participation * 100.0)) ")"
                                         }
                                     }
@@ -587,7 +587,7 @@ fn render_result(
                                     (player.name) ": "
                                     (render_elo_delta(effective_delta))
                                     @if change.participation < 1.0 {
-                                        span class="secondary" style="font-size: 0.8em;" {
+                                        span class="secondary participation-pct" {
                                             " (" (format!("{:.0}%", change.participation * 100.0)) ")"
                                         }
                                     }

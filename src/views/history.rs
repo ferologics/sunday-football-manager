@@ -105,7 +105,7 @@ pub async fn page(State(state): State<Arc<AppState>>, jar: CookieJar) -> impl In
         // Elo evolution graph
         @if !matches.is_empty() {
             h3 { "Elo Evolution" }
-            div style="position: relative; height: 400px; margin-bottom: 2rem;" {
+            div class="chart-container" {
                 canvas id="elo-chart" {}
             }
 
@@ -219,7 +219,7 @@ fn render_match(m: &Match, player_names: &HashMap<i32, String>) -> Markup {
                                     @let effective_delta = change.delta * change.participation;
                                     (render_elo_delta(effective_delta))
                                     @if change.participation < 1.0 {
-                                        span class="secondary" style="font-size: 0.8em;" {
+                                        span class="secondary participation-pct" {
                                             " (" (format!("{:.0}%", change.participation * 100.0)) ")"
                                         }
                                     }
@@ -242,7 +242,7 @@ fn render_match(m: &Match, player_names: &HashMap<i32, String>) -> Markup {
                                     @let effective_delta = change.delta * change.participation;
                                     (render_elo_delta(effective_delta))
                                     @if change.participation < 1.0 {
-                                        span class="secondary" style="font-size: 0.8em;" {
+                                        span class="secondary participation-pct" {
                                             " (" (format!("{:.0}%", change.participation * 100.0)) ")"
                                         }
                                     }
