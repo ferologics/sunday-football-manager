@@ -27,13 +27,14 @@ fn build_elo_timeline(matches: &[Match], players: &[crate::models::Player]) -> s
         .map(|p| (p.name.clone(), p.elo))
         .collect();
 
-    // Subtract all deltas to get starting Elo
+    // Subtract all deltas (effective = delta * participation) to get starting Elo
     for m in matches {
         let snapshot: HashMap<String, EloSnapshot> = serde_json::from_value(m.elo_snapshot.clone())
             .unwrap_or_default();
         for (name, change) in &snapshot {
             if let Some(elo) = starting_elo.get_mut(name) {
-                *elo -= change.delta;
+                let effective_delta = change.delta * change.participation;
+                *elo -= effective_delta;
             }
         }
     }
@@ -46,13 +47,15 @@ fn build_elo_timeline(matches: &[Match], players: &[crate::models::Player]) -> s
         let snapshot: HashMap<String, EloSnapshot> = serde_json::from_value(m.elo_snapshot.clone())
             .unwrap_or_default();
 
-        // Update Elo for players in this match
+        // Update Elo for players in this match (using effective delta)
         for (name, change) in &snapshot {
-            current_elo.insert(name.clone(), change.before + change.delta);
+            let effective_delta = change.delta * change.participation;
+            let new_elo = change.before + effective_delta;
+            current_elo.insert(name.clone(), new_elo);
             player_history
                 .entry(name.clone())
                 .or_default()
-                .push((date.clone(), change.before + change.delta));
+                .push((date.clone(), new_elo));
         }
     }
 
@@ -88,6 +91,9 @@ pub async fn page(State(state): State<Arc<AppState>>, jar: CookieJar) -> impl In
     let matches = db::get_all_matches(&state.db).await.unwrap_or_default();
     let players = db::get_all_players(&state.db).await.unwrap_or_default();
     let auth = AuthState::new(state.auth_password.is_some(), is_authenticated(&jar, &state));
+
+    // Build player ID → name map for display
+    let player_names: HashMap<i32, String> = players.iter().map(|p| (p.id, p.name.clone())).collect();
 
     let chart_data = build_elo_timeline(&matches, &players);
     let chart_data_json = serde_json::to_string(&chart_data).unwrap_or_else(|_| "{}".to_string());
@@ -167,7 +173,7 @@ pub async fn page(State(state): State<Arc<AppState>>, jar: CookieJar) -> impl In
             p { "No matches recorded yet." }
         } @else {
             @for m in &matches {
-                (render_match(m))
+                (render_match(m, &player_names))
             }
         }
     };
@@ -176,7 +182,7 @@ pub async fn page(State(state): State<Arc<AppState>>, jar: CookieJar) -> impl In
 }
 
 /// Render a single match as a collapsible card
-fn render_match(m: &Match) -> Markup {
+fn render_match(m: &Match, player_names: &HashMap<i32, String>) -> Markup {
     let result_text = if m.score_a > m.score_b {
         "Team A wins"
     } else if m.score_b > m.score_a {
@@ -185,7 +191,7 @@ fn render_match(m: &Match) -> Markup {
         "Draw"
     };
 
-    // Parse Elo snapshot
+    // Parse Elo snapshot (keyed by player name)
     let snapshot: HashMap<String, EloSnapshot> = serde_json::from_value(m.elo_snapshot.clone())
         .unwrap_or_default();
 
@@ -203,12 +209,19 @@ fn render_match(m: &Match) -> Markup {
                 div {
                     h4 { "Team A" }
                     ul class="player-list" {
-                        @for name in &m.team_a {
+                        @for player_id in &m.team_a {
+                            @let name = player_names.get(player_id).map(|s| s.as_str()).unwrap_or("Unknown");
                             li {
                                 (name)
                                 @if let Some(change) = snapshot.get(name) {
                                     " "
-                                    (render_elo_delta(change.delta))
+                                    @let effective_delta = change.delta * change.participation;
+                                    (render_elo_delta(effective_delta))
+                                    @if change.participation < 1.0 {
+                                        span class="secondary" style="font-size: 0.8em;" {
+                                            " (" (format!("{:.0}%", change.participation * 100.0)) ")"
+                                        }
+                                    }
                                 }
                             }
                         }
@@ -219,12 +232,19 @@ fn render_match(m: &Match) -> Markup {
                 div {
                     h4 { "Team B" }
                     ul class="player-list" {
-                        @for name in &m.team_b {
+                        @for player_id in &m.team_b {
+                            @let name = player_names.get(player_id).map(|s| s.as_str()).unwrap_or("Unknown");
                             li {
                                 (name)
                                 @if let Some(change) = snapshot.get(name) {
                                     " "
-                                    (render_elo_delta(change.delta))
+                                    @let effective_delta = change.delta * change.participation;
+                                    (render_elo_delta(effective_delta))
+                                    @if change.participation < 1.0 {
+                                        span class="secondary" style="font-size: 0.8em;" {
+                                            " (" (format!("{:.0}%", change.participation * 100.0)) ")"
+                                        }
+                                    }
                                 }
                             }
                         }

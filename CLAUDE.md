@@ -58,3 +58,5 @@ Rust web app using Axum, hosted on Render.com with Neon PostgreSQL.
 - K-factor: 32
 - Goal diff multiplier: min(1 + (GD-1)*0.5, 2.5)
 - Standard expected score formula
+- Handicap: 100 Elo per missing player-equivalent (for uneven teams/injuries)
+- Participation: injured players get proportional Elo credit (e.g., 50% participation = 50% delta)

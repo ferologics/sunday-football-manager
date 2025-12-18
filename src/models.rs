@@ -65,6 +65,7 @@ pub const TAG_WEIGHTS: &[(&str, i32)] = &[
 pub const ELO_DEFAULT: f32 = 1200.0;
 pub const ELO_K_FACTOR: f32 = 32.0;
 pub const GD_MULTIPLIER_CAP: f32 = 2.5;
+pub const HANDICAP_PER_PLAYER: f32 = 100.0; // Elo penalty per missing player-equivalent
 pub const MAX_PLAYERS: usize = 14;
 pub const MAX_PER_TEAM: usize = MAX_PLAYERS / 2;
 
@@ -114,8 +115,8 @@ pub struct UpdatePlayer {
 pub struct Match {
     pub id: i32,
     pub played_at: NaiveDate,
-    pub team_a: Vec<String>,
-    pub team_b: Vec<String>,
+    pub team_a: Vec<i32>,  // Player IDs
+    pub team_b: Vec<i32>,  // Player IDs
     pub score_a: i32,
     pub score_b: i32,
     pub elo_snapshot: serde_json::Value,
@@ -127,6 +128,12 @@ pub struct Match {
 pub struct EloSnapshot {
     pub before: f32,
     pub delta: f32,
+    #[serde(default = "default_participation")]
+    pub participation: f32, // 0.0 to 1.0, default 1.0
+}
+
+fn default_participation() -> f32 {
+    1.0
 }
 
 /// Result of team balancing

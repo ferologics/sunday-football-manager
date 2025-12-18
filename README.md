@@ -59,6 +59,19 @@ K = 32
 elo_change = K × gd_multiplier × (actual - expected)
 ```
 
+### Injuries & Uneven Teams
+
+When recording a match, you can set participation for each player (100%, 75%, 50%, 25%).
+
+**Handicap system**: Short-handed teams get credit for overcoming the odds.
+- Each missing "player-equivalent" = 100 Elo handicap adjustment
+- Example: 6v7 means Team A has a 100 Elo disadvantage baked into expected score
+- If they draw or win despite the handicap, they gain more Elo
+
+**Partial credit**: Injured players receive proportional Elo changes.
+- 50% participation = 50% of the Elo delta
+- Example: Team wins (+16), but player left at halftime → they get +8
+
 ## Development
 
 ### Prerequisites

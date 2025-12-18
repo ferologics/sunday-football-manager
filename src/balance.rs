@@ -82,9 +82,13 @@ pub fn balance_teams(players: &[Player], randomize: bool) -> Option<TeamSplit> {
             return pick_split(best_split, all_splits, randomize);
         }
     } else if gks.len() == 1 {
-        // Random assignment for single GK
+        // Single GK: assign to team A (deterministic), or random if randomize=true
         let gk = &gks[0];
-        let gk_on_team_a = rand::random::<bool>();
+        let gk_on_team_a = if randomize {
+            rand::random::<bool>()
+        } else {
+            true
+        };
 
         // Combo size depends on which team gets the GK
         // Team A needs (team_size - 1) non-GKs if GK is on team A
@@ -218,5 +222,94 @@ mod tests {
         let pm_b = split.team_b.iter().filter(|p| p.has_tag(Tag::Playmaker)).count();
         assert_eq!(pm_a, 1);
         assert_eq!(pm_b, 1);
+    }
+
+    #[test]
+    fn test_balance_two_gks() {
+        let players = vec![
+            make_player(1, "GK1", 1200.0, "GK"),
+            make_player(2, "GK2", 1200.0, "GK"),
+            make_player(3, "Player1", 1200.0, ""),
+            make_player(4, "Player2", 1200.0, ""),
+        ];
+
+        let split = balance_teams(&players, false).unwrap();
+
+        // Should force one GK per team
+        let gk_a = split.team_a.iter().filter(|p| p.has_tag(Tag::Gk)).count();
+        let gk_b = split.team_b.iter().filter(|p| p.has_tag(Tag::Gk)).count();
+        assert_eq!(gk_a, 1);
+        assert_eq!(gk_b, 1);
+    }
+
+    #[test]
+    fn test_balance_one_gk_deterministic() {
+        let players = vec![
+            make_player(1, "GK", 1200.0, "GK"),
+            make_player(2, "Player1", 1200.0, ""),
+            make_player(3, "Player2", 1200.0, ""),
+            make_player(4, "Player3", 1200.0, ""),
+        ];
+
+        // With randomize=false, should get same result every time
+        let split1 = balance_teams(&players, false).unwrap();
+        let split2 = balance_teams(&players, false).unwrap();
+
+        // GK should be on team A (deterministic behavior)
+        assert!(split1.team_a.iter().any(|p| p.has_tag(Tag::Gk)));
+        assert!(split2.team_a.iter().any(|p| p.has_tag(Tag::Gk)));
+
+        // Results should be identical
+        let names1: Vec<_> = split1.team_a.iter().map(|p| &p.name).collect();
+        let names2: Vec<_> = split2.team_a.iter().map(|p| &p.name).collect();
+        assert_eq!(names1, names2);
+    }
+
+    #[test]
+    fn test_balance_odd_players() {
+        // 5 players should split into 2 and 3
+        let players = vec![
+            make_player(1, "A", 1200.0, ""),
+            make_player(2, "B", 1200.0, ""),
+            make_player(3, "C", 1200.0, ""),
+            make_player(4, "D", 1200.0, ""),
+            make_player(5, "E", 1200.0, ""),
+        ];
+
+        let split = balance_teams(&players, false).unwrap();
+
+        // team_size = 5/2 = 2, so team_a has 2, team_b has 3
+        assert_eq!(split.team_a.len(), 2);
+        assert_eq!(split.team_b.len(), 3);
+    }
+
+    #[test]
+    fn test_balance_insufficient_players() {
+        // 0 players
+        let empty: Vec<Player> = vec![];
+        assert!(balance_teams(&empty, false).is_none());
+
+        // 1 player
+        let one = vec![make_player(1, "Alone", 1200.0, "")];
+        assert!(balance_teams(&one, false).is_none());
+    }
+
+    #[test]
+    fn test_balance_no_gks() {
+        let players = vec![
+            make_player(1, "A", 1400.0, ""),
+            make_player(2, "B", 1200.0, ""),
+            make_player(3, "C", 1200.0, ""),
+            make_player(4, "D", 1000.0, ""),
+        ];
+
+        let split = balance_teams(&players, false).unwrap();
+
+        // Should balance by Elo: 1400+1000 vs 1200+1200
+        let elo_a: f32 = split.team_a.iter().map(|p| p.elo).sum();
+        let elo_b: f32 = split.team_b.iter().map(|p| p.elo).sum();
+
+        // Teams should have similar total Elo (within 200)
+        assert!((elo_a - elo_b).abs() <= 200.0);
     }
 }

@@ -84,6 +84,25 @@ pub async fn page(State(state): State<Arc<AppState>>, jar: CookieJar) -> impl In
                     line-height: 1;
                 }
                 .chip button:hover { opacity: 0.7; }
+                .chip select {
+                    background: transparent;
+                    border: none;
+                    color: inherit;
+                    font-size: 0.75rem;
+                    padding: 0;
+                    margin: 0 0.25rem;
+                    cursor: pointer;
+                    -webkit-appearance: none;
+                    appearance: none;
+                }
+                .chip select option {
+                    background: var(--pico-card-background-color);
+                    color: var(--pico-color);
+                }
+                .chip.injured {
+                    opacity: 0.7;
+                    background: var(--pico-secondary-background);
+                }
             "#))
         }
 
@@ -196,18 +215,31 @@ pub async fn page(State(state): State<Arc<AppState>>, jar: CookieJar) -> impl In
 
                     selected.add(name);
 
-                    // Add chip
+                    // Add chip with participation dropdown
                     const chipsContainer = container.querySelector('.selected-chips');
                     const chip = document.createElement('span');
                     chip.className = 'chip';
                     chip.dataset.name = name;
-                    chip.innerHTML = `${{name}} <button type="button">&times;</button>`;
+                    chip.innerHTML = `${{name}} <select class="participation-select" title="Participation">
+                        <option value="1.0">100%</option>
+                        <option value="0.75">75%</option>
+                        <option value="0.5">50%</option>
+                        <option value="0.25">25%</option>
+                    </select><button type="button">&times;</button>`;
+
+                    // Handle participation change
+                    const select = chip.querySelector('select');
+                    select.addEventListener('change', () => {{
+                        updateParticipation(name, select.value);
+                        chip.classList.toggle('injured', select.value !== '1.0');
+                    }});
+
                     chip.querySelector('button').addEventListener('click', () => {{
                         removePlayer(container, name);
                     }});
                     chipsContainer.appendChild(chip);
 
-                    // Add hidden input for form
+                    // Add hidden input for team
                     const hidden = document.createElement('input');
                     hidden.type = 'hidden';
                     hidden.name = inputName;
@@ -215,10 +247,25 @@ pub async fn page(State(state): State<Arc<AppState>>, jar: CookieJar) -> impl In
                     hidden.dataset.playerName = name;
                     container.appendChild(hidden);
 
+                    // Add hidden input for participation (default 100%)
+                    const partInput = document.createElement('input');
+                    partInput.type = 'hidden';
+                    partInput.name = 'participation';
+                    partInput.value = `${{name}}=1.0`;
+                    partInput.dataset.participationFor = name;
+                    container.appendChild(partInput);
+
                     // Clear search and close dropdown
                     const search = container.querySelector('.player-search');
                     search.value = '';
                     container.querySelector('.player-dropdown').classList.remove('open');
+                }}
+
+                function updateParticipation(name, value) {{
+                    const input = document.querySelector(`input[data-participation-for="${{name}}"]`);
+                    if (input) {{
+                        input.value = `${{name}}=${{value}}`;
+                    }}
                 }}
 
                 function removePlayer(container, name) {{
@@ -231,9 +278,11 @@ pub async fn page(State(state): State<Arc<AppState>>, jar: CookieJar) -> impl In
                     const chip = container.querySelector(`.chip[data-name="${{name}}"]`);
                     if (chip) chip.remove();
 
-                    // Remove hidden input
+                    // Remove hidden inputs
                     const hidden = container.querySelector(`input[data-player-name="${{name}}"]`);
                     if (hidden) hidden.remove();
+                    const partInput = container.querySelector(`input[data-participation-for="${{name}}"]`);
+                    if (partInput) partInput.remove();
                 }}
 
                 // Setup event listeners
@@ -327,26 +376,79 @@ pub async fn submit_result(
         }.into_string());
     }
 
-    // Calculate Elo changes
-    let elo_changes = calculate_elo_changes(&team_a, &team_b, form.score_a, form.score_b);
+    // Warn about uneven teams (soft check with confirmation)
+    if team_a.len() != team_b.len() && !form.confirm_uneven {
+        return Html(html! {
+            article {
+                header { "Uneven Teams" }
+                p {
+                    "Team A has " (team_a.len()) " players, Team B has " (team_b.len()) " players."
+                }
+                p { "Are you sure you want to record this match?" }
+                button
+                    hx-post="/api/record"
+                    hx-include="closest form"
+                    hx-vals=r#"{"confirm_uneven": true}"#
+                    hx-target="#result-display"
+                {
+                    "Yes, record match"
+                }
+            }
+        }.into_string());
+    }
+
+    // Build participation map from form data (format: "PlayerName=0.75")
+    let mut participation: HashMap<String, f32> = HashMap::new();
+    if let Some(parts) = &form.participation {
+        for entry in parts {
+            if let Some((name, value)) = entry.split_once('=') {
+                if let Ok(v) = value.parse::<f32>() {
+                    participation.insert(name.to_string(), v.clamp(0.0, 1.0));
+                }
+            }
+        }
+    }
+
+    // Calculate Elo changes with handicap system
+    let elo_changes = calculate_elo_changes(&team_a, &team_b, form.score_a, form.score_b, &participation);
 
     // Build snapshot
     let snapshot: HashMap<String, EloSnapshot> = elo_changes.clone();
     let snapshot_json = serde_json::to_value(&snapshot).unwrap_or(json!({}));
 
-    // Update player Elos in database
-    for (name, change) in &elo_changes {
-        let new_elo = change.before + change.delta;
-        if let Err(e) = db::update_player_elo(&state.db, name, new_elo).await {
-            tracing::error!("Failed to update Elo for {}: {}", name, e);
+    // Use a transaction to ensure all updates are atomic
+    let mut tx = match state.db.begin().await {
+        Ok(tx) => tx,
+        Err(e) => {
+            tracing::error!("Failed to start transaction: {}", e);
+            return Html(html! {
+                p class="error" { "Database error" }
+            }.into_string());
+        }
+    };
+
+    // Update player Elos in database (applying participation for partial credit)
+    for player in team_a.iter().chain(team_b.iter()) {
+        if let Some(change) = elo_changes.get(&player.name) {
+            // Apply participation: injured players get proportional Elo change
+            let effective_delta = change.delta * change.participation;
+            let new_elo = change.before + effective_delta;
+            if let Err(e) = db::update_player_elo(&mut *tx, player.id, new_elo).await {
+                tracing::error!("Failed to update Elo for {}: {}", player.name, e);
+                return Html(html! {
+                    p class="error" { "Failed to update player Elo" }
+                }.into_string());
+            }
         }
     }
 
-    // Save match record
+    // Save match record (with player IDs)
+    let team_a_ids: Vec<i32> = team_a.iter().map(|p| p.id).collect();
+    let team_b_ids: Vec<i32> = team_b.iter().map(|p| p.id).collect();
     if let Err(e) = db::create_match(
-        &state.db,
-        &team_a_names,
-        &team_b_names,
+        &mut *tx,
+        &team_a_ids,
+        &team_b_ids,
         form.score_a,
         form.score_b,
         snapshot_json,
@@ -354,6 +456,14 @@ pub async fn submit_result(
         tracing::error!("Failed to save match: {}", e);
         return Html(html! {
             p class="error" { "Failed to save match record" }
+        }.into_string());
+    }
+
+    // Commit the transaction
+    if let Err(e) = tx.commit().await {
+        tracing::error!("Failed to commit transaction: {}", e);
+        return Html(html! {
+            p class="error" { "Failed to save changes" }
         }.into_string());
     }
 
@@ -368,6 +478,11 @@ pub struct RecordForm {
     team_b: Option<Vec<String>>,
     score_a: i32,
     score_b: i32,
+    #[serde(default)]
+    confirm_uneven: bool,
+    /// Participation percentages: "PlayerName=0.75" format
+    #[serde(default)]
+    participation: Option<Vec<String>>,
 }
 
 /// Render the match result with Elo changes

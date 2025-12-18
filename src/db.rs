@@ -1,5 +1,5 @@
 use crate::models::{Match, NewPlayer, Player, UpdatePlayer, ELO_DEFAULT};
-use sqlx::PgPool;
+use sqlx::{Executor, PgPool, Postgres};
 
 /// Get all players ordered by Elo (descending)
 pub async fn get_all_players(pool: &PgPool) -> Result<Vec<Player>, sqlx::Error> {
@@ -76,11 +76,14 @@ pub async fn update_player(
 }
 
 /// Update player Elo and match count after a match
-pub async fn update_player_elo(pool: &PgPool, name: &str, new_elo: f32) -> Result<(), sqlx::Error> {
-    sqlx::query("UPDATE players SET elo = $1, matches_played = matches_played + 1 WHERE name = $2")
+pub async fn update_player_elo<'e, E>(executor: E, id: i32, new_elo: f32) -> Result<(), sqlx::Error>
+where
+    E: Executor<'e, Database = Postgres>,
+{
+    sqlx::query("UPDATE players SET elo = $1, matches_played = matches_played + 1 WHERE id = $2")
         .bind(new_elo)
-        .bind(name)
-        .execute(pool)
+        .bind(id)
+        .execute(executor)
         .await?;
     Ok(())
 }
@@ -105,24 +108,27 @@ pub async fn get_all_matches(pool: &PgPool) -> Result<Vec<Match>, sqlx::Error> {
 }
 
 /// Create a new match record
-pub async fn create_match(
-    pool: &PgPool,
-    team_a: &[String],
-    team_b: &[String],
+pub async fn create_match<'e, E>(
+    executor: E,
+    team_a_ids: &[i32],
+    team_b_ids: &[i32],
     score_a: i32,
     score_b: i32,
     elo_snapshot: serde_json::Value,
-) -> Result<Match, sqlx::Error> {
+) -> Result<Match, sqlx::Error>
+where
+    E: Executor<'e, Database = Postgres>,
+{
     sqlx::query_as::<_, Match>(
         "INSERT INTO matches (team_a, team_b, score_a, score_b, elo_snapshot)
          VALUES ($1, $2, $3, $4, $5)
          RETURNING id, played_at, team_a, team_b, score_a, score_b, elo_snapshot, created_at",
     )
-    .bind(team_a)
-    .bind(team_b)
+    .bind(team_a_ids)
+    .bind(team_b_ids)
     .bind(score_a)
     .bind(score_b)
     .bind(elo_snapshot)
-    .fetch_one(pool)
+    .fetch_one(executor)
     .await
 }
