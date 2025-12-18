@@ -6,6 +6,14 @@ alias w := watch
 build:
   cargo build
 
+# Build release binary
+build-release:
+  cargo build --release
+
+# Extract changelog section for a version
+changelog VERSION:
+  ./scripts/changelog.sh {{VERSION}}
+
 check:
   cargo check
   cargo clippy
@@ -21,9 +29,20 @@ docker-build:
 docker-run:
   docker run -p 8000:8000 --env-file .env football-manager
 
-# Build release binary
+# Create and push a git tag from Cargo.toml version, triggering GH release
 release:
-  cargo build --release
+  #!/usr/bin/env bash
+  VERSION=$(grep '^version' Cargo.toml | head -1 | sed 's/.*"\(.*\)"/\1/')
+  echo "Releasing $VERSION..."
+  echo "Changelog:"
+  ./scripts/changelog.sh "$VERSION"
+  echo ""
+  read -p "Create tag and push? [y/N] " -n 1 -r
+  echo
+  if [[ $REPLY =~ ^[Yy]$ ]]; then
+    git tag "$VERSION"
+    git push origin "$VERSION"
+  fi
 
 run:
   cargo run
