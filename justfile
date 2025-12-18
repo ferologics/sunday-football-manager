@@ -6,6 +6,9 @@ alias w := watch
 build:
   cargo build
 
+clean:
+  cargo clean
+
 check:
   cargo check
   cargo clippy
