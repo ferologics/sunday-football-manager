@@ -6,9 +6,8 @@ use axum::{
     extract::{Path, State},
     http::StatusCode,
     response::{Html, IntoResponse},
-    Form,
 };
-use axum_extra::extract::cookie::CookieJar;
+use axum_extra::extract::{cookie::CookieJar, Form};
 use maud::{html, Markup};
 use std::sync::Arc;
 
