@@ -78,22 +78,28 @@ pub async fn page(State(state): State<Arc<AppState>>, jar: CookieJar) -> impl In
         // Script to enable/disable buttons and update counter
         script {
             (maud::PreEscaped(r#"
+                const MAX_PLAYERS = 14;
                 const buttons = document.querySelectorAll('#checkin-form button[type="submit"]');
                 const counter = document.getElementById('player-count');
+                const checkboxes = document.querySelectorAll('.player-checkbox');
 
                 function updateState() {
                     const checked = document.querySelectorAll('.player-checkbox:checked').length;
                     // Update counter
-                    counter.textContent = checked + ' / 14';
+                    counter.textContent = checked + ' / ' + MAX_PLAYERS;
                     // Enable buttons when at least 2 players selected (minimum for teams)
                     buttons.forEach(btn => btn.disabled = checked < 2);
+                    // Disable unchecked boxes when at max
+                    checkboxes.forEach(cb => {
+                        if (!cb.checked) cb.disabled = checked >= MAX_PLAYERS;
+                    });
                 }
 
                 // Initial state
                 updateState();
 
                 // Listen for changes
-                document.querySelectorAll('.player-checkbox').forEach(cb => {
+                checkboxes.forEach(cb => {
                     cb.addEventListener('change', updateState);
                 });
             "#))

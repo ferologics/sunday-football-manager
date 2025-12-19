@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.3.7
+
+### Fixed
+
+- **Player selection cap**: Enforce 14-player max on Teams page (unchecked boxes disable when limit reached)
+
 ## 0.3.6
 
 ### Changed
