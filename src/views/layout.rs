@@ -33,6 +33,7 @@ pub fn base(title: &str, current_page: &str, auth: &AuthState, content: Markup) 
                     .team-grid { display: grid; grid-template-columns: 1fr; gap: 1rem; }
                     @media (min-width: 768px) { .team-grid { grid-template-columns: 1fr 1fr; } }
                     .player-list { list-style: none; padding: 0; }
+                    ol.player-list { list-style: decimal; }
                     .table-container { overflow-x: auto; }
                     .player-list li { padding: 0.5rem; border-bottom: 1px solid var(--pico-muted-border-color); }
                     .tag { display: inline-block; padding: 0.1rem 0.4rem; border-radius: 4px; font-size: 0.75rem; background: var(--pico-primary-background); color: var(--pico-primary-inverse); margin-left: 0.25rem; }

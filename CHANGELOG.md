@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.3.8
+
+### Added
+
+- **Goal rotation order**: Teams without a dedicated GK now display players as a numbered list sorted by Elo. Higher Elo = later in rotation = less time in goal 🧤
+
 ## 0.3.7
 
 ### Fixed

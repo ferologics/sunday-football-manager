@@ -1,7 +1,7 @@
 use crate::auth::is_authenticated;
 use crate::balance::balance_teams;
 use crate::elo::average_elo;
-use crate::models::TeamSplit;
+use crate::models::{Player, Tag, TeamSplit};
 use crate::views::layout::{base, render_tags, AuthState};
 use crate::{db, AppState};
 use axum::{
@@ -213,6 +213,10 @@ fn render_teams(split: &TeamSplit) -> Markup {
     let elo_a = average_elo(&split.team_a);
     let elo_b = average_elo(&split.team_b);
 
+    // Sort teams by Elo ascending and check for dedicated GKs
+    let (team_a_sorted, team_a_has_gk) = sort_team_for_goal_rotation(&split.team_a);
+    let (team_b_sorted, team_b_has_gk) = sort_team_for_goal_rotation(&split.team_b);
+
     html! {
         h3 { "Generated Teams" }
 
@@ -221,11 +225,23 @@ fn render_teams(split: &TeamSplit) -> Markup {
             article {
                 header { "Team A" }
                 p { strong { "Avg Elo: " (format!("{:.0}", elo_a)) } }
-                ul class="player-list" {
-                    @for player in &split.team_a {
-                        li {
-                            (player.name) " (" (format!("{:.0}", player.elo)) ")"
-                            (render_tags(&player.tags))
+                @if team_a_has_gk {
+                    ul class="player-list" style="padding-left: 1.25em;" {
+                        @for player in &team_a_sorted {
+                            li {
+                                (player.name) " (" (format!("{:.0}", player.elo)) ")"
+                                (render_tags(&player.tags))
+                            }
+                        }
+                    }
+                } @else {
+                    p class="secondary" style="font-size: 0.85em; margin-bottom: 0.5em;" { "🧤 Goal rotation order" }
+                    ol class="player-list" style="padding-left: 1.5em;" {
+                        @for player in &team_a_sorted {
+                            li {
+                                (player.name) " (" (format!("{:.0}", player.elo)) ")"
+                                (render_tags(&player.tags))
+                            }
                         }
                     }
                 }
@@ -235,11 +251,23 @@ fn render_teams(split: &TeamSplit) -> Markup {
             article {
                 header { "Team B" }
                 p { strong { "Avg Elo: " (format!("{:.0}", elo_b)) } }
-                ul class="player-list" {
-                    @for player in &split.team_b {
-                        li {
-                            (player.name) " (" (format!("{:.0}", player.elo)) ")"
-                            (render_tags(&player.tags))
+                @if team_b_has_gk {
+                    ul class="player-list" style="padding-left: 1.25em;" {
+                        @for player in &team_b_sorted {
+                            li {
+                                (player.name) " (" (format!("{:.0}", player.elo)) ")"
+                                (render_tags(&player.tags))
+                            }
+                        }
+                    }
+                } @else {
+                    p class="secondary" style="font-size: 0.85em; margin-bottom: 0.5em;" { "🧤 Goal rotation order" }
+                    ol class="player-list" style="padding-left: 1.5em;" {
+                        @for player in &team_b_sorted {
+                            li {
+                                (player.name) " (" (format!("{:.0}", player.elo)) ")"
+                                (render_tags(&player.tags))
+                            }
                         }
                     }
                 }
@@ -257,5 +285,83 @@ fn render_teams(split: &TeamSplit) -> Markup {
             }
             p class="secondary" { "Total Cost: " (format!("{:.1}", split.cost)) }
         }
+    }
+}
+
+/// Sort team by Elo ascending for goal rotation order.
+/// Returns (sorted_players, has_dedicated_gk).
+fn sort_team_for_goal_rotation(team: &[Player]) -> (Vec<Player>, bool) {
+    let mut sorted = team.to_vec();
+    sorted.sort_by(|a, b| a.elo.partial_cmp(&b.elo).unwrap());
+    let has_gk = sorted.iter().any(|p| p.has_tag(Tag::Gk));
+    (sorted, has_gk)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use chrono::Utc;
+
+    fn make_player(id: i32, name: &str, elo: f32, tags: &str) -> Player {
+        Player {
+            id,
+            name: name.to_string(),
+            elo,
+            tags: tags.to_string(),
+            matches_played: 0,
+            created_at: Utc::now(),
+        }
+    }
+
+    #[test]
+    fn test_sort_team_by_elo_ascending() {
+        let team = vec![
+            make_player(1, "High", 1400.0, ""),
+            make_player(2, "Low", 1000.0, ""),
+            make_player(3, "Mid", 1200.0, ""),
+        ];
+
+        let (sorted, has_gk) = sort_team_for_goal_rotation(&team);
+
+        assert!(!has_gk);
+        assert_eq!(sorted[0].name, "Low");
+        assert_eq!(sorted[1].name, "Mid");
+        assert_eq!(sorted[2].name, "High");
+    }
+
+    #[test]
+    fn test_team_with_gk_detected() {
+        let team = vec![
+            make_player(1, "Keeper", 1200.0, "GK"),
+            make_player(2, "Player", 1200.0, ""),
+        ];
+
+        let (_, has_gk) = sort_team_for_goal_rotation(&team);
+        assert!(has_gk);
+    }
+
+    #[test]
+    fn test_team_without_gk() {
+        let team = vec![
+            make_player(1, "Runner", 1200.0, "RUNNER"),
+            make_player(2, "Playmaker", 1200.0, "PLAYMAKER"),
+        ];
+
+        let (_, has_gk) = sort_team_for_goal_rotation(&team);
+        assert!(!has_gk);
+    }
+
+    #[test]
+    fn test_higher_elo_goes_last() {
+        let team = vec![
+            make_player(1, "Star", 1500.0, "PLAYMAKER"),
+            make_player(2, "Newbie", 1000.0, ""),
+            make_player(3, "Average", 1200.0, ""),
+        ];
+
+        let (sorted, _) = sort_team_for_goal_rotation(&team);
+
+        assert_eq!(sorted[0].name, "Newbie"); // First in goal
+        assert_eq!(sorted[2].name, "Star"); // Last in goal
     }
 }
