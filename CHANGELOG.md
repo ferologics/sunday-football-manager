@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.4.1
+
+### Changed
+
+- Code cleanup: extracted shared JS functions for hash encoding and checkbox restoration
+
 ## 0.4.0
 
 ### Added

@@ -110,43 +110,46 @@ pub async fn page(State(state): State<Arc<AppState>>, jar: CookieJar) -> impl In
                     return param.split(',').map(s => parseInt(s, 10)).filter(n => !isNaN(n));
                 }
 
+                // Encode team IDs to hash format (mirrors Rust encode_teams_hash)
+                function encodeTeamsHash(teamA, teamB) {
+                    return 'a=' + teamA.join(',') + '&b=' + teamB.join(',');
+                }
+
+                // Restore checkbox selection from team IDs
+                function restoreCheckboxes(teamIds) {
+                    checkboxes.forEach(cb => {
+                        if (teamIds.includes(parseInt(cb.value))) {
+                            cb.checked = true;
+                        }
+                    });
+                    updateState();
+                }
+
                 // On page load: restore state from hash or localStorage
                 window.addEventListener('load', () => {
                     const hash = window.location.hash.slice(1);
                     let teamIds = null;
 
                     if (hash && hash.includes('a=') && hash.includes('b=')) {
-                        // Parse IDs from hash
                         const params = new URLSearchParams(hash);
                         const teamA = parseTeamIds(params.get('a'));
                         const teamB = parseTeamIds(params.get('b'));
                         teamIds = [...teamA, ...teamB];
-                        // Load teams display
                         htmx.ajax('GET', '/api/teams?' + hash, '#teams-display');
                     } else {
-                        // Try localStorage
                         const saved = localStorage.getItem('lastTeams');
                         if (saved) {
                             try {
                                 const { teamA, teamB } = JSON.parse(saved);
                                 teamIds = [...teamA, ...teamB];
-                                // Also load the teams display
-                                const hash = 'a=' + teamA.join(',') + '&b=' + teamB.join(',');
+                                const hash = encodeTeamsHash(teamA, teamB);
                                 htmx.ajax('GET', '/api/teams?' + hash, '#teams-display');
                                 history.replaceState(null, '', '#' + hash);
                             } catch (e) {}
                         }
                     }
 
-                    // Check the corresponding checkboxes
-                    if (teamIds) {
-                        checkboxes.forEach(cb => {
-                            if (teamIds.includes(parseInt(cb.value))) {
-                                cb.checked = true;
-                            }
-                        });
-                        updateState();
-                    }
+                    if (teamIds) restoreCheckboxes(teamIds);
                 });
 
                 // After teams generated: update hash + localStorage
@@ -156,11 +159,7 @@ pub async fn page(State(state): State<Arc<AppState>>, jar: CookieJar) -> impl In
                         if (result) {
                             const teamA = JSON.parse(result.dataset.teamA);
                             const teamB = JSON.parse(result.dataset.teamB);
-                            
-                            // Update URL hash (without triggering reload)
-                            history.replaceState(null, '', '#a=' + teamA.join(',') + '&b=' + teamB.join(','));
-                            
-                            // Save to localStorage for Record page
+                            history.replaceState(null, '', '#' + encodeTeamsHash(teamA, teamB));
                             localStorage.setItem('lastTeams', JSON.stringify({teamA, teamB}));
                         }
                     }
@@ -283,19 +282,13 @@ fn parse_team_ids(param: &str) -> Vec<i32> {
 /// Encode team IDs to URL hash format (e.g., [1,5,7], [2,3,6] → "a=1,5,7&b=2,3,6")
 #[cfg(test)]
 fn encode_teams_hash(team_a: &[i32], team_b: &[i32]) -> String {
-    format!(
-        "a={}&b={}",
-        team_a
-            .iter()
+    let join = |ids: &[i32]| {
+        ids.iter()
             .map(|id| id.to_string())
             .collect::<Vec<_>>()
-            .join(","),
-        team_b
-            .iter()
-            .map(|id| id.to_string())
-            .collect::<Vec<_>>()
-            .join(","),
-    )
+            .join(",")
+    };
+    format!("a={}&b={}", join(team_a), join(team_b))
 }
 
 /// View teams from URL params (for shareable links)
