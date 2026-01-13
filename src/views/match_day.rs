@@ -167,10 +167,13 @@ pub async fn page(State(state): State<Arc<AppState>>, jar: CookieJar) -> impl In
 
                 // Copy link to clipboard
                 function copyTeamLink() {
+                    const btn = document.getElementById('copy-link-btn');
+                    const orig = btn.textContent;
                     navigator.clipboard.writeText(window.location.href).then(() => {
-                        const btn = document.getElementById('copy-link-btn');
-                        const orig = btn.textContent;
                         btn.textContent = 'Copied!';
+                        setTimeout(() => btn.textContent = orig, 2000);
+                    }).catch(() => {
+                        btn.textContent = 'Failed';
                         setTimeout(() => btn.textContent = orig, 2000);
                     });
                 }

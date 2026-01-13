@@ -1,6 +1,6 @@
 [package]
 name = "football-manager"
-version = "0.4.1"
+version = "0.4.2"
 edition = "2021"
 repository = "https://github.com/ferologics/sunday-football-manager"
 

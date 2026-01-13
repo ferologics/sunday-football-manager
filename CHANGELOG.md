@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.4.2
+
+### Fixed
+
+- Copy link button now shows "Failed" if clipboard access is denied
+
 ## 0.4.1
 
 ### Changed
