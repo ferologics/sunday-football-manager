@@ -5,11 +5,12 @@ use crate::models::{Player, Tag, TeamSplit};
 use crate::views::layout::{base, render_tags, AuthState};
 use crate::{db, AppState};
 use axum::{
-    extract::State,
+    extract::{Query, State},
     response::{Html, IntoResponse},
 };
 use axum_extra::extract::{cookie::CookieJar, Form};
-use maud::{html, Markup};
+use maud::{html, Markup, PreEscaped};
+use serde::Deserialize;
 use std::sync::Arc;
 
 /// Team Generator page - check-in and team generation
@@ -77,7 +78,7 @@ pub async fn page(State(state): State<Arc<AppState>>, jar: CookieJar) -> impl In
 
         // Script to enable/disable buttons and update counter
         script {
-            (maud::PreEscaped(r#"
+            (PreEscaped(r#"
                 const MAX_PLAYERS = 14;
                 const buttons = document.querySelectorAll('#checkin-form button[type="submit"]');
                 const counter = document.getElementById('player-count');
@@ -102,6 +103,79 @@ pub async fn page(State(state): State<Arc<AppState>>, jar: CookieJar) -> impl In
                 checkboxes.forEach(cb => {
                     cb.addEventListener('change', updateState);
                 });
+
+                // Parse comma-separated IDs (mirrors Rust parse_team_ids)
+                function parseTeamIds(param) {
+                    if (!param) return [];
+                    return param.split(',').map(s => parseInt(s, 10)).filter(n => !isNaN(n));
+                }
+
+                // On page load: restore state from hash or localStorage
+                window.addEventListener('load', () => {
+                    const hash = window.location.hash.slice(1);
+                    let teamIds = null;
+
+                    if (hash && hash.includes('a=') && hash.includes('b=')) {
+                        // Parse IDs from hash
+                        const params = new URLSearchParams(hash);
+                        const teamA = parseTeamIds(params.get('a'));
+                        const teamB = parseTeamIds(params.get('b'));
+                        teamIds = [...teamA, ...teamB];
+                        // Load teams display
+                        htmx.ajax('GET', '/api/teams?' + hash, '#teams-display');
+                    } else {
+                        // Try localStorage
+                        const saved = localStorage.getItem('lastTeams');
+                        if (saved) {
+                            try {
+                                const { teamA, teamB } = JSON.parse(saved);
+                                teamIds = [...teamA, ...teamB];
+                                // Also load the teams display
+                                const hash = 'a=' + teamA.join(',') + '&b=' + teamB.join(',');
+                                htmx.ajax('GET', '/api/teams?' + hash, '#teams-display');
+                                history.replaceState(null, '', '#' + hash);
+                            } catch (e) {}
+                        }
+                    }
+
+                    // Check the corresponding checkboxes
+                    if (teamIds) {
+                        checkboxes.forEach(cb => {
+                            if (teamIds.includes(parseInt(cb.value))) {
+                                cb.checked = true;
+                            }
+                        });
+                        updateState();
+                    }
+                });
+
+                // After teams generated: update hash + localStorage
+                document.body.addEventListener('htmx:afterSwap', (e) => {
+                    if (e.detail.target.id === 'teams-display') {
+                        const result = e.detail.target.querySelector('[data-team-a]');
+                        if (result) {
+                            const teamA = JSON.parse(result.dataset.teamA);
+                            const teamB = JSON.parse(result.dataset.teamB);
+                            
+                            // Update URL hash (without triggering reload)
+                            history.replaceState(null, '', '#a=' + teamA.join(',') + '&b=' + teamB.join(','));
+                            
+                            // Save to localStorage for Record page
+                            localStorage.setItem('lastTeams', JSON.stringify({teamA, teamB}));
+                        }
+                    }
+                });
+
+                // Copy link to clipboard
+                function copyTeamLink() {
+                    navigator.clipboard.writeText(window.location.href).then(() => {
+                        const btn = document.getElementById('copy-link-btn');
+                        const orig = btn.textContent;
+                        btn.textContent = 'Copied!';
+                        setTimeout(() => btn.textContent = orig, 2000);
+                    });
+                }
+                window.copyTeamLink = copyTeamLink;
             "#))
         }
     };
@@ -201,8 +275,95 @@ pub async fn shuffle_teams(
     }
 }
 
+/// Parse comma-separated IDs from URL param (e.g., "1,5,7" → [1, 5, 7])
+fn parse_team_ids(param: &str) -> Vec<i32> {
+    param.split(',').filter_map(|s| s.parse().ok()).collect()
+}
+
+/// Encode team IDs to URL hash format (e.g., [1,5,7], [2,3,6] → "a=1,5,7&b=2,3,6")
+#[cfg(test)]
+fn encode_teams_hash(team_a: &[i32], team_b: &[i32]) -> String {
+    format!(
+        "a={}&b={}",
+        team_a
+            .iter()
+            .map(|id| id.to_string())
+            .collect::<Vec<_>>()
+            .join(","),
+        team_b
+            .iter()
+            .map(|id| id.to_string())
+            .collect::<Vec<_>>()
+            .join(","),
+    )
+}
+
+/// View teams from URL params (for shareable links)
+pub async fn view_teams(
+    State(state): State<Arc<AppState>>,
+    Query(params): Query<ViewTeamsParams>,
+) -> impl IntoResponse {
+    let team_a_ids = parse_team_ids(&params.a);
+    let team_b_ids = parse_team_ids(&params.b);
+
+    if team_a_ids.is_empty() || team_b_ids.is_empty() {
+        return Html(
+            html! {
+                p class="error" { "Invalid team data" }
+            }
+            .into_string(),
+        );
+    }
+
+    // Fetch players for each team
+    let team_a = match db::get_players_by_ids(&state.db, &team_a_ids).await {
+        Ok(p) => p,
+        Err(e) => {
+            tracing::error!("Failed to get team A players: {}", e);
+            return Html(
+                html! {
+                    p class="error" { "Failed to load team A" }
+                }
+                .into_string(),
+            );
+        }
+    };
+
+    let team_b = match db::get_players_by_ids(&state.db, &team_b_ids).await {
+        Ok(p) => p,
+        Err(e) => {
+            tracing::error!("Failed to get team B players: {}", e);
+            return Html(
+                html! {
+                    p class="error" { "Failed to load team B" }
+                }
+                .into_string(),
+            );
+        }
+    };
+
+    // Build a TeamSplit (cost/diff don't matter for display)
+    let split = TeamSplit {
+        team_a,
+        team_b,
+        cost: 0.0,
+        elo_diff: 0.0,
+        tag_value_a: 0,
+        tag_value_b: 0,
+    };
+
+    Html(render_teams(&split).into_string())
+}
+
+/// Query params for viewing pre-defined teams
+#[derive(Deserialize)]
+pub struct ViewTeamsParams {
+    a: String,
+    b: String,
+}
+
 /// Form data for team generation
-#[derive(Debug, serde::Deserialize)]
+#[derive(Debug, Deserialize)]
 pub struct GenerateForm {
     #[serde(default)]
     player_ids: Vec<String>,
@@ -217,73 +378,92 @@ fn render_teams(split: &TeamSplit) -> Markup {
     let (team_a_sorted, team_a_has_gk) = sort_team_for_goal_rotation(&split.team_a);
     let (team_b_sorted, team_b_has_gk) = sort_team_for_goal_rotation(&split.team_b);
 
+    // Serialize team IDs for JavaScript (sorted order)
+    let team_a_ids: Vec<i32> = team_a_sorted.iter().map(|p| p.id).collect();
+    let team_b_ids: Vec<i32> = team_b_sorted.iter().map(|p| p.id).collect();
+    let team_a_json = serde_json::to_string(&team_a_ids).unwrap_or_else(|_| "[]".to_string());
+    let team_b_json = serde_json::to_string(&team_b_ids).unwrap_or_else(|_| "[]".to_string());
+
     html! {
-        h3 { "Generated Teams" }
+        // Data attributes for JS to read team IDs
+        div data-team-a=(team_a_json) data-team-b=(team_b_json) {
+            h3 { "Generated Teams" }
 
-        div class="team-grid" {
-            // Team A
-            article {
-                header { "Team A" }
-                p { strong { "Avg Elo: " (format!("{:.0}", elo_a)) } }
-                @if team_a_has_gk {
-                    ul class="player-list" style="padding-left: 1.25em;" {
-                        @for player in &team_a_sorted {
-                            li {
-                                (player.name) " (" (format!("{:.0}", player.elo)) ")"
-                                (render_tags(&player.tags))
+            div class="team-grid" {
+                // Team A
+                article {
+                    header { "Team A" }
+                    p { strong { "Avg Elo: " (format!("{:.0}", elo_a)) } }
+                    @if team_a_has_gk {
+                        ul class="player-list" style="padding-left: 1.25em;" {
+                            @for player in &team_a_sorted {
+                                li {
+                                    (player.name) " (" (format!("{:.0}", player.elo)) ")"
+                                    (render_tags(&player.tags))
+                                }
+                            }
+                        }
+                    } @else {
+                        p class="secondary" style="font-size: 0.85em; margin-bottom: 0.5em;" { "🧤 Goal rotation order" }
+                        ol class="player-list" style="padding-left: 1.5em;" {
+                            @for player in &team_a_sorted {
+                                li {
+                                    (player.name) " (" (format!("{:.0}", player.elo)) ")"
+                                    (render_tags(&player.tags))
+                                }
                             }
                         }
                     }
-                } @else {
-                    p class="secondary" style="font-size: 0.85em; margin-bottom: 0.5em;" { "🧤 Goal rotation order" }
-                    ol class="player-list" style="padding-left: 1.5em;" {
-                        @for player in &team_a_sorted {
-                            li {
-                                (player.name) " (" (format!("{:.0}", player.elo)) ")"
-                                (render_tags(&player.tags))
+                }
+
+                // Team B
+                article {
+                    header { "Team B" }
+                    p { strong { "Avg Elo: " (format!("{:.0}", elo_b)) } }
+                    @if team_b_has_gk {
+                        ul class="player-list" style="padding-left: 1.25em;" {
+                            @for player in &team_b_sorted {
+                                li {
+                                    (player.name) " (" (format!("{:.0}", player.elo)) ")"
+                                    (render_tags(&player.tags))
+                                }
+                            }
+                        }
+                    } @else {
+                        p class="secondary" style="font-size: 0.85em; margin-bottom: 0.5em;" { "🧤 Goal rotation order" }
+                        ol class="player-list" style="padding-left: 1.5em;" {
+                            @for player in &team_b_sorted {
+                                li {
+                                    (player.name) " (" (format!("{:.0}", player.elo)) ")"
+                                    (render_tags(&player.tags))
+                                }
                             }
                         }
                     }
                 }
             }
 
-            // Team B
-            article {
-                header { "Team B" }
-                p { strong { "Avg Elo: " (format!("{:.0}", elo_b)) } }
-                @if team_b_has_gk {
-                    ul class="player-list" style="padding-left: 1.25em;" {
-                        @for player in &team_b_sorted {
-                            li {
-                                (player.name) " (" (format!("{:.0}", player.elo)) ")"
-                                (render_tags(&player.tags))
-                            }
-                        }
-                    }
-                } @else {
-                    p class="secondary" style="font-size: 0.85em; margin-bottom: 0.5em;" { "🧤 Goal rotation order" }
-                    ol class="player-list" style="padding-left: 1.5em;" {
-                        @for player in &team_b_sorted {
-                            li {
-                                (player.name) " (" (format!("{:.0}", player.elo)) ")"
-                                (render_tags(&player.tags))
-                            }
-                        }
-                    }
+            // Balance details
+            details {
+                summary { "Balance Details" }
+                p { "Elo Diff: " (format!("{:.1}", split.elo_diff)) }
+                p {
+                    "Tag Value: "
+                    (split.tag_value_a) " vs " (split.tag_value_b)
+                    " (diff: " ((split.tag_value_a - split.tag_value_b).abs()) ")"
+                }
+                p class="secondary" { "Total Cost: " (format!("{:.1}", split.cost)) }
+            }
+
+            // Action buttons
+            div class="grid" style="margin-top: 1rem;" {
+                button id="copy-link-btn" type="button" class="secondary outline" onclick="copyTeamLink()" {
+                    "📋 Copy link"
+                }
+                button type="button" onclick="window.location.href='/record'" {
+                    "Record this match →"
                 }
             }
-        }
-
-        // Balance details
-        details {
-            summary { "Balance Details" }
-            p { "Elo Diff: " (format!("{:.1}", split.elo_diff)) }
-            p {
-                "Tag Value: "
-                (split.tag_value_a) " vs " (split.tag_value_b)
-                " (diff: " ((split.tag_value_a - split.tag_value_b).abs()) ")"
-            }
-            p class="secondary" { "Total Cost: " (format!("{:.1}", split.cost)) }
         }
     }
 }
@@ -363,5 +543,36 @@ mod tests {
 
         assert_eq!(sorted[0].name, "Newbie"); // First in goal
         assert_eq!(sorted[2].name, "Star"); // Last in goal
+    }
+
+    #[test]
+    fn test_parse_team_ids() {
+        assert_eq!(parse_team_ids("1,5,7"), vec![1, 5, 7]);
+        assert_eq!(parse_team_ids("42"), vec![42]);
+        assert_eq!(parse_team_ids(""), Vec::<i32>::new());
+        assert_eq!(parse_team_ids("1,invalid,3"), vec![1, 3]); // skips invalid
+    }
+
+    #[test]
+    fn test_encode_teams_hash() {
+        assert_eq!(encode_teams_hash(&[1, 5, 7], &[2, 3, 6]), "a=1,5,7&b=2,3,6");
+        assert_eq!(encode_teams_hash(&[42], &[13]), "a=42&b=13");
+    }
+
+    #[test]
+    fn test_team_ids_roundtrip() {
+        let team_a = vec![1, 5, 7];
+        let team_b = vec![2, 3, 6];
+
+        let hash = encode_teams_hash(&team_a, &team_b);
+        // Parse like view_teams does from query params
+        let params: std::collections::HashMap<&str, &str> =
+            hash.split('&').filter_map(|p| p.split_once('=')).collect();
+
+        let parsed_a = parse_team_ids(params["a"]);
+        let parsed_b = parse_team_ids(params["b"]);
+
+        assert_eq!(parsed_a, team_a);
+        assert_eq!(parsed_b, team_b);
     }
 }

@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.4.0
+
+### Added
+
+- **Shareable team links**: Generated teams now update the URL hash (`#a=1,2,3&b=4,5,6`). Copy and share the link - anyone opening it sees the same teams.
+- **Copy link button**: One-click copy of the shareable URL after generating teams
+- **Record page pre-fill**: Teams are saved to localStorage, so clicking "Record this match →" auto-fills both teams on the Record page
+
 ## 0.3.8
 
 ### Added

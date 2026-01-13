@@ -351,6 +351,32 @@ pub async fn page(State(state): State<Arc<AppState>>, jar: CookieJar) -> impl In
                         }}
                     }});
                 }});
+
+                // Load teams from localStorage (set by Teams page)
+                const savedTeams = localStorage.getItem('lastTeams');
+                if (savedTeams) {{
+                    try {{
+                        const {{ teamA, teamB }} = JSON.parse(savedTeams);
+                        const containerA = document.querySelector('.player-select[data-team="a"]');
+                        const containerB = document.querySelector('.player-select[data-team="b"]');
+                        
+                        // Map IDs to player objects and select them
+                        teamA.forEach(id => {{
+                            const player = allPlayers.find(p => p.id === id);
+                            if (player && containerA) {{
+                                selectPlayer(containerA, player.name, player.id);
+                            }}
+                        }});
+                        teamB.forEach(id => {{
+                            const player = allPlayers.find(p => p.id === id);
+                            if (player && containerB) {{
+                                selectPlayer(containerB, player.name, player.id);
+                            }}
+                        }});
+                    }} catch (e) {{
+                        console.error('Failed to load saved teams:', e);
+                    }}
+                }}
             "#, players_json = players_json_str, max_per_team = MAX_PER_TEAM)))
         }
     };

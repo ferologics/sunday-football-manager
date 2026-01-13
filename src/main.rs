@@ -82,6 +82,7 @@ async fn main() {
         // API - Team Generator
         .route("/api/generate", post(views::match_day::generate_teams))
         .route("/api/shuffle", post(views::match_day::shuffle_teams))
+        .route("/api/teams", get(views::match_day::view_teams))
         // API - Record
         .route("/api/record", post(views::record::submit_result))
         .layer(TraceLayer::new_for_http())
